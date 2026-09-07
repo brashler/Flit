@@ -1,0 +1,27 @@
+# Flit (flit-physics)
+
+> Tiny sphere-physics engine for three.js games and demos: gravity, impulse
+> collisions, fixed-point LUT friction, voxel-walk raycasts, and a Morton
+> spatial-hash broadphase. TypeScript, CPU, single-threaded, zero native
+> dependencies. Ships an MCP server and an agent skill so coding agents can
+> wire physics into a scene themselves.
+
+## Docs
+
+- [README](https://github.com/brashler/Flit/blob/main/README.md): install, usage, benchmarks, agent entry points
+- [Agent skill](https://github.com/brashler/Flit/blob/main/skills/flit/SKILL.md): 30-second three.js integration recipe, MCP usage, contributor rules
+- [AGENTS.md](https://github.com/brashler/Flit/blob/main/AGENTS.md): repo-level agent instructions
+- [Changelog](https://github.com/brashler/Flit/blob/main/CHANGELOG.md)
+- [Third-party notices](https://github.com/brashler/Flit/blob/main/THIRD_PARTY_NOTICES.md): FLANN (BSD-2) and other provenance
+
+## Reference
+
+- [npm package](https://www.npmjs.com/package/flit-physics): `npm i flit-physics`
+- [Demo scene](https://github.com/brashler/Flit/blob/main/demo/main.ts): the proven InstancedMesh integration pattern
+- [MCP server](https://github.com/brashler/Flit/blob/main/mcp/server.ts): stdio MCP tools (`flit_spawn`, `flit_step`, `flit_state`, `flit_raycast`, ...)
+- [Open issue brief](https://github.com/brashler/Flit/blob/main/docs/issues/001-settled-pile-performance.md): settled-pile solver cost, help wanted
+
+## Optional
+
+- [Benchmarks](https://github.com/brashler/Flit/tree/main/bench): deterministic perf harness (broadphase, world step, scaling, codec bake-off)
+- [Tests](https://github.com/brashler/Flit/tree/main/test): vitest suite (57 tests)
