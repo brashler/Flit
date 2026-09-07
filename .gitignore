@@ -71,6 +71,7 @@ Testing/
 # node / typescript
 node_modules/
 dist/
+dist-mcp/
 
 # source headers pending upstream attribution header (not for publication yet)
 offering/
