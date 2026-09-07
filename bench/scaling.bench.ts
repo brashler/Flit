@@ -4,9 +4,12 @@
  *  A) FIXED BOX (density rises with N) — models "how many balls fit in the
  *     demo box". Pair count grows ~quadratically: that is the physics of
  *     crowding, not an algorithmic defect.
- *  B) SCALED BOX (constant density, box volume proportional to N) — models
- *     algorithmic scaling. A correct grid broadphase is O(N) here; pairs
- *     per ball should stay ~constant.
+ *  B) SCALED BOX (constant spawn density, box volume proportional to N) —
+ *     models algorithmic scaling. A correct grid broadphase is O(N) here;
+ *     pairs per ball stay ~constant — WHILE bodies are scattered. Note:
+ *     with gravity on, bodies rain into a dense floor pile over ~2-4s and
+ *     the steady state becomes contact-solver dominated. Set WARMUP=240
+ *     (env) to measure the settled-pile state instead of the scatter state.
  *
  * Budgets: 16.67 ms = 60 fps, 8.33 ms = 120 fps.
  * Run with: npx vite-node bench/scaling.bench.ts
@@ -18,7 +21,7 @@ import { mulberry32 } from './rand.js';
 const RADIUS = 0.35;
 const CELL = RADIUS * 2; // matches World's auto cellSize for uniform radius
 const DT = 1 / 60;
-const WARMUP_STEPS = 30;
+const WARMUP_STEPS = Number(process.env.WARMUP ?? 30);
 const MEASURED_STEPS = 60;
 
 interface Box {

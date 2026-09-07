@@ -91,12 +91,18 @@ time (see commit messages for the full series, including rejected designs).
   xor-hash 3.4–3.7 ms (444 pairs, ~90% collision bloat) → Morton keys
   with ordered probing **3.5–3.7 ms (234 pairs, exact)**.
 - `bench/world.bench.ts` — full `World.step`, N=1024:
-  xor-hash 0.85 ms/step → Morton ordered-probing **0.83 ms/step** —
-  exact, invertible, GPU-ordered keys at or below xor cost.
-- `bench/scaling.bench.ts` — two regimes. Fixed box (density rises):
-  pairs scale ~N² from crowding physics; 60fps holds to ~5k balls.
-  Scaled box (constant density): **flat O(N)** — ~1.2 ms per 1000
-  bodies from N=250 through N=8000 (9.65 ms/step at 8k, inside budget).
+  xor-hash 0.85 ms/step → Morton ordered-probing 0.83 ms/step →
+  **0.93 ms/step** with the sequential-impulse velocity solver
+  (4 iterations + LUT friction). Exact keys, real contacts, +11%.
+- `bench/scaling.bench.ts` — two regimes, and one important caveat.
+  Fixed box (density rises): pairs scale ~N² from crowding physics.
+  Scaled box (constant *spawn* density): flat O(N) ≈ 1.2 ms per 1000
+  through N=8000 — **but only while bodies are scattered**. The
+  caveat: with gravity on, everything rains into a dense floor pile
+  over ~2-4s (`WARMUP=240` to reproduce), and steady-state piles are
+  contact-solver dominated: ~4.3 ms per 1000 at N=8000 (87k contacts
+  x 4 iterations), putting the 60fps pile budget near 3k bodies.
+  The known fix for piles is island sleeping / agglomeration — parked.
 - `bench/morton-libs.bench.ts` — codec bake-off vs npm libs
   (`npm run bench:libs`): ours 3.8 ns/encode, fast-morton MB 26.1,
   fast-morton LUT 43.8, @thi.ng/morton 539.9. In-house wins; the libs

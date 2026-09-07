@@ -20,13 +20,15 @@ describe('World', () => {
     expect(world.velocities[i * 3 + 1]).toBe(0);
   });
 
-  it('separates overlapping spheres exactly', () => {
+  it('separates overlapping spheres within a few steps', () => {
     const world = new World({ gravity: [0, 0, 0], groundY: null, restitution: 0 });
     const a = world.addParticle({ position: [0, 0, 0], radius: 0.5 });
     const b = world.addParticle({ position: [0.7, 0, 0], radius: 0.5 });
-    world.step(DT);
+    for (let s = 0; s < 10; s += 1) world.step(DT);
     const dx = world.positions[b * 3] - world.positions[a * 3];
-    expect(dx).toBeCloseTo(1.0, 3); // pushed apart to exactly r_a + r_b
+    // converges to r_a + r_b minus the positional slop
+    expect(dx).toBeGreaterThan(0.99);
+    expect(dx).toBeLessThanOrEqual(1.0);
   });
 
   it('swaps velocities in a head-on elastic collision of equal masses', () => {
@@ -60,6 +62,38 @@ describe('World', () => {
     const finalY = world.positions[i * 3 + 1];
     expect(minY).toBeGreaterThan(0.49); // never tunneled through the floor
     expect(finalY).toBeCloseTo(0.5, 2); // resting at exactly radius height
+  });
+
+  it('damps tangential velocity in a sliding contact (LUT friction)', () => {
+    const world = new World({ gravity: [0, 0, 0], groundY: null, restitution: 0, friction: 0.5 });
+    const a = world.addParticle({ position: [0, 0, 0], radius: 0.5 });
+    const b = world.addParticle({ position: [0.9, 0, 0], radius: 0.5, velocity: [0, 2, 0] });
+    world.step(DT);
+    // viscous LUT damping drives tangential velocities toward their mean
+    const va = world.velocities[a * 3 + 1];
+    const vb = world.velocities[b * 3 + 1];
+    expect(Math.abs(vb - va)).toBeLessThan(0.2);
+    expect(va).toBeGreaterThan(0.8);
+    expect(vb).toBeLessThan(1.2);
+  });
+
+  it('snaps slow tangential motion to a stop (static LUT bucket)', () => {
+    const world = new World({ gravity: [0, 0, 0], groundY: null, restitution: 0, friction: 0.5 });
+    const a = world.addParticle({ position: [0, 0, 0], radius: 0.5 });
+    const b = world.addParticle({ position: [0.9, 0, 0], radius: 0.5, velocity: [0, 0.3, 0] });
+    world.step(DT);
+    const va = world.velocities[a * 3 + 1];
+    const vb = world.velocities[b * 3 + 1];
+    expect(Math.abs(vb - va)).toBeLessThan(1e-3); // fully equalized: no creep
+    expect(vb).toBeCloseTo(0.15, 3); // momentum shared equally
+  });
+
+  it('slows a ball sliding on the ground via plane friction', () => {
+    const world = new World({ restitution: 0, friction: 0.5 });
+    const i = world.addParticle({ position: [0, 0.5, 0], radius: 0.5, velocity: [3, -0.1, 0] });
+    for (let s = 0; s < 300; s += 1) world.step(DT);
+    expect(Math.abs(world.velocities[i * 3])).toBeLessThan(0.05);
+    expect(world.positions[i * 3 + 1]).toBeCloseTo(0.5, 1);
   });
 
   it('keeps bodies inside AABB bounds and reflects their velocity', () => {

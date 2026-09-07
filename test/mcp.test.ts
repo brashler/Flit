@@ -26,6 +26,7 @@ describe('flit MCP server', () => {
         expect(names).toEqual([
           'flit_add_particles',
           'flit_info',
+          'flit_raycast',
           'flit_reset',
           'flit_spawn',
           'flit_state',
@@ -53,6 +54,12 @@ describe('flit MCP server', () => {
         const state = await callJson(client, 'flit_state');
         expect(state.positions).toHaveLength(30);
         expect(state.radii).toHaveLength(10);
+
+        await callJson(client, 'flit_reset', { gravity: [0, 0, 0], groundY: null });
+        await callJson(client, 'flit_add_particles', { particles: [{ position: [3, 0, 0], radius: 0.5 }] });
+        const ray = await callJson(client, 'flit_raycast', { origin: [0, 0, 0], direction: [1, 0, 0] });
+        expect(ray.hits).toHaveLength(1);
+        expect(ray.hits[0].distance).toBeCloseTo(2.5, 4);
       } finally {
         await client.close();
       }

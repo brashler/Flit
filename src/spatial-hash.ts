@@ -108,11 +108,29 @@ export class SpatialHash {
   }
 
   private keyFor(x: number, y: number, z: number): number {
-    return morton3D_10(
-      SpatialHash.clampCoord(Math.floor(x / this.cellSize) + SpatialHash.COORD_BIAS),
-      SpatialHash.clampCoord(Math.floor(y / this.cellSize) + SpatialHash.COORD_BIAS),
-      SpatialHash.clampCoord(Math.floor(z / this.cellSize) + SpatialHash.COORD_BIAS),
+    return SpatialHash.keyFromCoords(
+      Math.floor(x / this.cellSize),
+      Math.floor(y / this.cellSize),
+      Math.floor(z / this.cellSize),
     );
+  }
+
+  /**
+   * Key for a cell given in UN-biased grid coords (applies bias + clamp).
+   * queryPairs works on biased coords straight from demorton3D_10 and must
+   * NOT use this — different input spaces.
+   */
+  private static keyFromCoords(cx: number, cy: number, cz: number): number {
+    return morton3D_10(
+      SpatialHash.clampCoord(cx + SpatialHash.COORD_BIAS),
+      SpatialHash.clampCoord(cy + SpatialHash.COORD_BIAS),
+      SpatialHash.clampCoord(cz + SpatialHash.COORD_BIAS),
+    );
+  }
+
+  /** Bodies in a grid cell (un-biased coords), for voxel walks like raycasts. */
+  public getCellBodies(cellX: number, cellY: number, cellZ: number): readonly number[] | undefined {
+    return this.cells.get(SpatialHash.keyFromCoords(cellX, cellY, cellZ));
   }
 
   private static clampCoord(coord: number): number {

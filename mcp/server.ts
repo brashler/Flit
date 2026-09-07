@@ -210,4 +210,21 @@ server.registerTool(
   async () => asJson({ count: world.count, positions: flatPositions(), radii: flatRadii() }),
 );
 
+server.registerTool(
+  'flit_raycast',
+  {
+    title: 'Raycast',
+    description:
+      'Cast a ray through the scene (Amanatides-Woo voxel walk over the broadphase grid). ' +
+      'Returns hits sorted by distance: body index, distance, point, normal.',
+    inputSchema: {
+      origin: vec3Schema,
+      direction: vec3Schema.describe('Need not be normalized'),
+      maxDistance: z.number().positive().optional(),
+    },
+  },
+  async ({ origin, direction, maxDistance }) =>
+    asJson({ hits: world.raycast(origin, direction, maxDistance ?? Infinity) }),
+);
+
 await server.connect(new StdioServerTransport());
