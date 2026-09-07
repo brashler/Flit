@@ -1,5 +1,5 @@
 {
-  "name": "flit",
+  "name": "flit-physics",
   "version": "0.1.0",
   "description": "Flit is a tiny little physics engine for 3js. CPU-first, GPU-shaped.",
   "type": "module",
