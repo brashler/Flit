@@ -17,6 +17,11 @@ export interface WorldOptions {
   restitution?: number;
   /** Y coordinate of the infinite ground plane. Default 0; null disables it. */
   groundY?: number | null;
+  /**
+   * Optional axis-aligned box; dynamic bodies reflect off its walls with
+   * the world restitution. Independent of groundY. Default null (no walls).
+   */
+  bounds?: { min: [number, number, number]; max: [number, number, number] } | null;
   /** Initial particle capacity. Grows automatically. Default 1024. */
   capacity?: number;
 }
@@ -51,6 +56,7 @@ export class World {
   public readonly gravity: vec3;
   public restitution: number;
   public groundY: number | null;
+  public bounds: { min: vec3; max: vec3 } | null;
 
   private readonly hash = new SpatialHash(1);
 
@@ -64,6 +70,9 @@ export class World {
     this.gravity = vec3.fromValues(...(options.gravity ?? [0, -9.81, 0]));
     this.restitution = options.restitution ?? 0.4;
     this.groundY = options.groundY === undefined ? 0 : options.groundY;
+    this.bounds = options.bounds
+      ? { min: vec3.fromValues(...options.bounds.min), max: vec3.fromValues(...options.bounds.max) }
+      : null;
   }
 
   /** Add a particle, returns its index. Indices are stable for the World's lifetime. */
@@ -106,6 +115,9 @@ export class World {
     this.hash.queryPairs((i, j) => this.resolvePair(i, j));
     if (this.groundY !== null) {
       this.resolveGround(this.groundY);
+    }
+    if (this.bounds !== null) {
+      this.resolveBounds(this.bounds);
     }
   }
 
@@ -165,6 +177,24 @@ export class World {
       p[1] += penetration;
       const v = this.velViews[i];
       if (v[1] < 0) v[1] = -v[1] * this.restitution;
+    }
+  }
+
+  private resolveBounds(bounds: { min: vec3; max: vec3 }): void {
+    for (let i = 0; i < this.count; i += 1) {
+      if (this.invMasses[i] === 0) continue;
+      const p = this.posViews[i];
+      const v = this.velViews[i];
+      const r = this.radii[i];
+      for (let axis = 0; axis < 3; axis += 1) {
+        if (p[axis] - r < bounds.min[axis]) {
+          p[axis] = bounds.min[axis] + r;
+          if (v[axis] < 0) v[axis] = -v[axis] * this.restitution;
+        } else if (p[axis] + r > bounds.max[axis]) {
+          p[axis] = bounds.max[axis] - r;
+          if (v[axis] > 0) v[axis] = -v[axis] * this.restitution;
+        }
+      }
     }
   }
 

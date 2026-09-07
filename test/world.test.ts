@@ -62,6 +62,28 @@ describe('World', () => {
     expect(finalY).toBeCloseTo(0.5, 2); // resting at exactly radius height
   });
 
+  it('keeps bodies inside AABB bounds and reflects their velocity', () => {
+    const world = new World({
+      gravity: [0, 0, 0],
+      groundY: null,
+      restitution: 1,
+      bounds: { min: [-2, -2, -2], max: [2, 2, 2] },
+    });
+    const i = world.addParticle({ position: [1.9, 0, 0], radius: 0.5, velocity: [5, 0, 0] });
+    world.step(DT); // would escape to x = 1.983 + contact, wall at x = 1.5
+    expect(world.positions[i * 3]).toBeLessThanOrEqual(1.5 + 1e-6);
+    expect(world.velocities[i * 3]).toBeLessThan(0); // reflected
+
+    // long run: never escapes, any axis
+    const j = world.addParticle({ position: [0, 0, 0], radius: 0.4, velocity: [7, -9, 11] });
+    for (let s = 0; s < 600; s += 1) {
+      world.step(DT);
+      for (let axis = 0; axis < 3; axis += 1) {
+        expect(Math.abs(world.positions[j * 3 + axis])).toBeLessThanOrEqual(2 - 0.4 + 1e-4);
+      }
+    }
+  });
+
   it('grows capacity without losing state', () => {
     const world = new World({ capacity: 2, gravity: [0, 0, 0], groundY: null });
     world.addParticle({ position: [1, 2, 3] });
