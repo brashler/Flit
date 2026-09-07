@@ -7,7 +7,8 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "flit": ["./src/index.ts"]
+      "flit": ["./src/index.ts"],
+      "flit-physics": ["./src/index.ts"]
     }
   },
   "include": ["src", "mcp", "bench", "demo", "vite.config.ts", "vitest.config.ts"]

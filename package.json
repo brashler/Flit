@@ -1,7 +1,8 @@
 {
   "name": "flit-physics",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Flit is a tiny little physics engine for 3js. CPU-first, GPU-shaped.",
+  "mcpName": "io.github.brashler/flit",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,11 +12,15 @@
       "import": "./dist/index.js"
     }
   },
+  "bin": {
+    "flit-physics": "dist-mcp/server.js"
+  },
   "files": [
-    "dist"
+    "dist",
+    "dist-mcp"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.mcp.json",
     "prepublishOnly": "npm run build && npm test",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",

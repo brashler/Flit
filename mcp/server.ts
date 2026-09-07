@@ -1,14 +1,16 @@
+#!/usr/bin/env node
 /**
  * Flit MCP server — lets agents drive the physics engine directly:
  * reset a world, spawn preset scenes, step, and read back flat position
  * buffers shaped for three.js InstancedMesh syncing.
  *
- * Run: npm run mcp   (stdio transport; no stdout logging allowed here)
+ * Run: npm run mcp (source, via vite-node) or npx flit-physics (built bin).
+ * Stdio transport; no stdout logging allowed here.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { World } from '../src/index.js';
+import { World } from 'flit-physics';
 
 const vec3Schema = z.tuple([z.number(), z.number(), z.number()]);
 const MAX_PARTICLES = 5000;
