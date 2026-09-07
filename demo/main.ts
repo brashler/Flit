@@ -18,7 +18,9 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { World } from 'flit';
 
-const COUNT = 220;
+// Load testing: ?n=8000 cranks the ball count (clamped to [1, 20000]).
+const params = new URLSearchParams(location.search);
+const COUNT = Math.min(Math.max(Number(params.get('n')) || 220, 1), 20000);
 const DT = 1 / 60;
 const BOX = {
   min: [-9, 0, -9] as [number, number, number],
@@ -72,8 +74,10 @@ scene.add(
   ),
 );
 
+// Drop mesh detail at high counts so load tests aren't trivially GPU-bound.
+const segments = COUNT > 2000 ? { w: 10, h: 7 } : { w: 20, h: 14 };
 const balls = new InstancedMesh(
-  new SphereGeometry(1, 20, 14),
+  new SphereGeometry(1, segments.w, segments.h),
   new MeshStandardMaterial({ roughness: 0.35, metalness: 0.1 }),
   COUNT,
 );
@@ -101,12 +105,15 @@ const hud = document.getElementById('hud')!;
 let accumulator = 0;
 let last = performance.now();
 let stepMs = 0;
+let frameMs = 16.7;
 let frame = 0;
 
 renderer.setAnimationLoop(() => {
   const now = performance.now();
-  accumulator += Math.min((now - last) / 1000, 0.1); // clamp long tab-outs
+  const frameDelta = now - last;
+  accumulator += Math.min(frameDelta / 1000, 0.1); // clamp long tab-outs
   last = now;
+  frameMs = frameMs * 0.95 + frameDelta * 0.05; // smoothed, for fps
 
   while (accumulator >= DT) {
     const t0 = performance.now();
@@ -121,7 +128,9 @@ renderer.setAnimationLoop(() => {
 
   frame += 1;
   if (frame % 15 === 0) {
-    hud.textContent = `flit demo | ${world.count} balls | step ${stepMs.toFixed(3)} ms\ndrag to orbit, wheel to zoom`;
+    hud.textContent =
+      `flit demo | ${world.count} balls | ${(1000 / frameMs).toFixed(0)} fps | ` +
+      `step ${stepMs.toFixed(3)} ms\n?n=8000 to load test | drag to orbit, wheel to zoom`;
   }
 });
 

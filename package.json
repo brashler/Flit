@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit",
     "bench": "vite-node bench/broadphase.bench.ts && vite-node bench/world.bench.ts",
     "bench:libs": "vite-node bench/morton-libs.bench.ts",
+    "bench:scaling": "vite-node bench/scaling.bench.ts",
     "demo": "vite"
   },
   "keywords": [
