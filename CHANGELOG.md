@@ -3,6 +3,18 @@
 All notable changes to Flit. Semver-ish while 0.x: minor = new features,
 patch = fixes.
 
+## [0.2.2] — 2026-09-07
+
+Metadata-only release: adds the "Flit Physics" display title for the MCP
+Registry listing (registry versions are immutable; titles ride versions).
+No code changes.
+
+## [0.2.1] — 2026-09-07
+
+Packages the MCP server as an npx-runnable bin (`npx flit-physics`),
+adds `mcpName` for MCP Registry ownership verification, and publishes the
+server to the official MCP Registry. No engine changes.
+
 ## [0.2.0] — 2026-09-07
 
 ### Added

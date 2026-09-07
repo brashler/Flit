@@ -1,6 +1,6 @@
 {
   "name": "flit-physics",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Flit is a tiny little physics engine for 3js. CPU-first, GPU-shaped.",
   "mcpName": "io.github.brashler/flit",
   "type": "module",

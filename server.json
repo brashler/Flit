@@ -1,17 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.brashler/flit",
+  "title": "Flit Physics",
   "description": "Tiny sphere-physics engine for three.js games: spawn, step, raycast, InstancedMesh-ready positions",
   "repository": {
     "url": "https://github.com/brashler/Flit",
     "source": "github"
   },
-  "version": "0.2.1",
+  "version": "0.2.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "flit-physics",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "transport": {
         "type": "stdio"
       }
