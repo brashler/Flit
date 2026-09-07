@@ -91,3 +91,41 @@ export function demorton3D(key: bigint): [number, number, number] {
     Number(compact1by2(key >> 2n)),
   ];
 }
+
+/**
+ * Fast path: 10 bits per axis packed into a 30-bit JS number key.
+ * Pure 32-bit bitwise ops — no BigInt allocation (which measured ~13x
+ * slower than xor-hash keys in the broadphase benchmark; see commit
+ * history). Range is ±511 cells around the bias point; SpatialHash
+ * documents how it degrades gracefully past that via clamping.
+ */
+
+/** Spread the low 10 bits of n to positions 0, 3, 6, … (max bit 29). */
+function part1by2_10(n: number): number {
+  n &= 0x3ff;
+  n = (n | (n << 16)) & 0x030000ff;
+  n = (n | (n << 8)) & 0x0300f00f;
+  n = (n | (n << 4)) & 0x030c30c3;
+  n = (n | (n << 2)) & 0x09249249;
+  return n;
+}
+
+/** Inverse of part1by2_10. */
+function compact1by2_10(n: number): number {
+  n &= 0x09249249;
+  n = (n ^ (n >>> 2)) & 0x030c30c3;
+  n = (n ^ (n >>> 4)) & 0x0300f00f;
+  n = (n ^ (n >>> 8)) & 0x030000ff;
+  n = (n ^ (n >>> 16)) & 0x3ff;
+  return n;
+}
+
+/** Morton-encode three 10-bit coordinates into a 30-bit number key. */
+export function morton3D_10(x: number, y: number, z: number): number {
+  return (part1by2_10(x) | (part1by2_10(y) << 1) | (part1by2_10(z) << 2)) >>> 0;
+}
+
+/** Decode a morton3D_10 key back into [x, y, z]. */
+export function demorton3D_10(key: number): [number, number, number] {
+  return [compact1by2_10(key), compact1by2_10(key >>> 1), compact1by2_10(key >>> 2)];
+}

@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   demorton2D,
   demorton3D,
+  demorton3D_10,
+  hamming32,
   hamming64,
   morton2D,
   morton3D,
+  morton3D_10,
   zInterleave,
 } from '../src/index.js';
 
@@ -63,5 +66,39 @@ describe('morton3D', () => {
     const a = morton3D(100, 100, 100);
     const b = morton3D(101, 100, 100); // 100 and 101 differ in one bit
     expect(hamming64(a, b)).toBe(1);
+  });
+});
+
+describe('morton3D_10 (30-bit number-key fast path)', () => {
+  it('puts x, y, z on bits 0/1/2 mod 3', () => {
+    expect(morton3D_10(1, 0, 0)).toBe(1);
+    expect(morton3D_10(0, 1, 0)).toBe(2);
+    expect(morton3D_10(0, 0, 1)).toBe(4);
+    expect(morton3D_10(0, 0, 0)).toBe(0);
+  });
+
+  it('round-trips including 10-bit extremes', () => {
+    const cases: Array<[number, number, number]> = [
+      [0, 0, 0],
+      [1, 2, 3],
+      [1023, 1023, 1023],
+      [512, 0, 999],
+      [1023, 1, 512],
+    ];
+    for (const [x, y, z] of cases) {
+      expect(demorton3D_10(morton3D_10(x, y, z))).toEqual([x, y, z]);
+    }
+  });
+
+  it('stays a positive 30-bit key', () => {
+    const key = morton3D_10(1023, 1023, 1023);
+    expect(key).toBe(0x3fffffff);
+    expect(key).toBeGreaterThan(0);
+  });
+
+  it('is locality-preserving: adjacent cells differ by one bit', () => {
+    const a = morton3D_10(100, 100, 100);
+    const b = morton3D_10(101, 100, 100);
+    expect(hamming32(a, b)).toBe(1);
   });
 });
