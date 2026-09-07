@@ -17,29 +17,38 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "bench": "vite-node bench/broadphase.bench.ts && vite-node bench/world.bench.ts",
     "bench:libs": "vite-node bench/morton-libs.bench.ts",
     "bench:scaling": "vite-node bench/scaling.bench.ts",
-    "demo": "vite"
+    "demo": "vite",
+    "mcp": "vite-node mcp/server.ts"
   },
   "keywords": [
     "physics",
+    "game-physics",
     "three.js",
+    "3js",
+    "game",
     "spatial-hash",
-    "lsh"
+    "lsh",
+    "mcp",
+    "agent"
   ],
   "license": "MIT",
   "dependencies": {
     "gl-matrix": "^3.4.4"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@thi.ng/morton": "^3.1.151",
+    "@types/node": "^26.4.1",
     "@types/three": "^0.185.4",
     "fast-morton": "^1.1.0",
     "three": "^0.185.1",
     "typescript": "^5.8.0",
     "vite": "^7.3.6",
-    "vitest": "^3.1.0"
+    "vitest": "^3.1.0",
+    "zod": "^4.5.4"
   }
 }

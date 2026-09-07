@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "flit": ["./src/index.ts"]
+    }
+  },
+  "include": ["src", "mcp", "bench", "demo", "vite.config.ts", "vitest.config.ts"]
+}
