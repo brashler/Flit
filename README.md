@@ -22,6 +22,32 @@ compute backend: same buffers, same kernels, no re-architecting.
   float bit-flips for radix sorting, octagonal approximate distance.
   See `THIRD_PARTY_NOTICES.md` for provenance and licenses.
 
+## For agents
+
+Building a little three.js game or demo? Two ways in:
+
+- **Skill**: `skills/flit/SKILL.md` — copy the `skills/flit/` directory into
+  your agent's skills path (e.g. `.claude/skills/`, `~/.code_puppy/skills/`).
+  It carries the 30-second integration recipe, the MCP option, measured
+  performance envelope, and contributor rules.
+- **MCP server** (no code needed): `npm run mcp`, or point your client at it:
+
+```json
+{
+  "mcpServers": {
+    "flit": {
+      "command": "npx",
+      "args": ["vite-node", "mcp/server.ts"],
+      "cwd": "<path-to-this-repo>"
+    }
+  }
+}
+```
+
+Tools: `flit_info`, `flit_reset`, `flit_spawn` (rain/explosion/grid/fountain
+presets), `flit_add_particles`, `flit_step`, `flit_state` — the last two
+return flat xyz positions shaped for `InstancedMesh` syncing.
+
 ## Usage
 
 ```ts
