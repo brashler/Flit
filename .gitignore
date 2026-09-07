@@ -67,3 +67,10 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# node / typescript
+node_modules/
+dist/
+
+# source headers pending upstream attribution header (not for publication yet)
+offering/

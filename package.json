@@ -1,0 +1,36 @@
+{
+  "name": "flit",
+  "version": "0.1.0",
+  "description": "Flit is a tiny little physics engine for 3js. CPU-first, GPU-shaped.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "physics",
+    "three.js",
+    "spatial-hash",
+    "lsh"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "gl-matrix": "^3.4.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0"
+  }
+}
