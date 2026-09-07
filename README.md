@@ -49,6 +49,7 @@ npm install
 npm test        # vitest
 npm run build   # tsc -> dist/
 npm run bench   # broadphase + full-step micro-benchmarks
+npm run demo    # three.js demo scene (vite dev server)
 ```
 
 ## Benchmarks
@@ -71,7 +72,7 @@ time (see commit messages for the full series).
 ## Roadmap
 
 - ~~Morton-ordered broadphase cells~~ — done, measured, shipped
-- three.js demo scene
+- ~~three.js demo scene~~ — `npm run demo`, 220 balls in a box
 - WebGPU compute backend once the CPU reference settles
 
 ## License

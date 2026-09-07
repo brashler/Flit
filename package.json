@@ -19,7 +19,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "bench": "vite-node bench/broadphase.bench.ts && vite-node bench/world.bench.ts",
-    "bench:libs": "vite-node bench/morton-libs.bench.ts"
+    "bench:libs": "vite-node bench/morton-libs.bench.ts",
+    "demo": "vite"
   },
   "keywords": [
     "physics",
@@ -33,8 +34,11 @@
   },
   "devDependencies": {
     "@thi.ng/morton": "^3.1.151",
+    "@types/three": "^0.185.4",
     "fast-morton": "^1.1.0",
+    "three": "^0.185.1",
     "typescript": "^5.8.0",
+    "vite": "^7.3.6",
     "vitest": "^3.1.0"
   }
 }
