@@ -115,6 +115,10 @@ time (see commit messages for the full series, including rejected designs).
 
 - ~~Morton-ordered broadphase cells~~ — done, measured, shipped
 - ~~three.js demo scene~~ — `npm run demo`, 220 balls in a box
+- **Open issue:** settled-pile solver cost — see
+  [`docs/issues/001-settled-pile-performance.md`](docs/issues/001-settled-pile-performance.md)
+  (self-contained brief with repro, evidence, and definition of done;
+  suitable for an agent or human to pick up)
 - WebGPU compute backend once the CPU reference settles
 
 ## License

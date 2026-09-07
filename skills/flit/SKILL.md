@@ -100,10 +100,13 @@ Typical flow: `flit_spawn({preset: "rain", count: 200})` → loop
 
 ## Performance envelope (measured, don't guess)
 
-- ~0.83 ms/step at 1,000 bodies; flat O(N) ≈ 1.2 ms per 1,000 at constant
-  density through 8,000. 60fps holds to ~5,000 balls in a tight box.
-- Pair volume scales with density (physics, not algorithm): dense piles of
-  8k+ are the known wall. Keep games in the sparse-to-medium regime.
+- ~0.93 ms/step at 1,000 bodies; flat O(N) ≈ 1.2 ms per 1,000 at constant
+  density through 8,000 while bodies are scattered.
+- Caveat: with gravity, bodies rain into dense floor piles within ~2-4s;
+  settled piles are contact-solver dominated (~4.3 ms per 1,000 at 8k).
+  Keep games in the sparse-to-medium regime, or pursue
+  `docs/issues/001-settled-pile-performance.md` (open, self-contained
+  brief: island sleeping, adaptive iterations, warm starting).
 
 ## Rules for working ON the engine (contributing agents)
 
