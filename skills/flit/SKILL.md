@@ -16,7 +16,9 @@ overkill.
 
 ## Option A: 30-second recipe (library)
 
-Get the source and alias it (Flit is consumed from source; no build needed):
+Easiest: `npm i flit-physics` and `import { World } from 'flit-physics'`.
+
+Or consume from source (best for hacking on the engine itself):
 
 ```bash
 git clone https://github.com/brashler/Flit.git

@@ -50,8 +50,12 @@ return flat xyz positions shaped for `InstancedMesh` syncing.
 
 ## Usage
 
+```bash
+npm i flit-physics
+```
+
 ```ts
-import { World } from 'flit';
+import { World } from 'flit-physics';
 
 const world = new World({ restitution: 0.4 }); // gravity and a floor at y=0 included
 
