@@ -55,19 +55,25 @@ npm run demo    # three.js demo scene (vite dev server)
 ## Benchmarks
 
 Deterministic seeds; numbers from a local dev machine, recorded at commit
-time (see commit messages for the full series).
+time (see commit messages for the full series, including rejected designs).
 
 - `bench/broadphase.bench.ts` — broadphase only, N=4096:
   xor-hash 3.4–3.7 ms (444 pairs, ~90% collision bloat) → Morton keys
-  4.4–4.6 ms (**234 pairs, exact**). BigInt-key attempt measured
-  43–50 ms and was rejected.
-- `bench/world.bench.ts` — full `World.step`, N=1024: 1.17 ms/step
-  (vs 0.85 ms/step for xor — the price of exact, invertible,
-  GPU-ordered keys).
+  with ordered probing **3.5–3.7 ms (234 pairs, exact)**.
+- `bench/world.bench.ts` — full `World.step`, N=1024:
+  xor-hash 0.85 ms/step → Morton ordered-probing **0.83 ms/step** —
+  exact, invertible, GPU-ordered keys at or below xor cost.
+- `bench/scaling.bench.ts` — two regimes. Fixed box (density rises):
+  pairs scale ~N² from crowding physics; 60fps holds to ~5k balls.
+  Scaled box (constant density): **flat O(N)** — ~1.2 ms per 1000
+  bodies from N=250 through N=8000 (9.65 ms/step at 8k, inside budget).
 - `bench/morton-libs.bench.ts` — codec bake-off vs npm libs
   (`npm run bench:libs`): ours 3.8 ns/encode, fast-morton MB 26.1,
   fast-morton LUT 43.8, @thi.ng/morton 539.9. In-house wins; the libs
   stay as devDependencies purely so the bake-off stays runnable.
+- Rejected on measurement (see commits): 63-bit BigInt keys (13× alloc
+  regression); sorted-array + binary-search broadphase (1.4× slower
+  than Map probing in JS — negative result recorded).
 
 ## Roadmap
 

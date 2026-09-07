@@ -56,33 +56,51 @@ export class SpatialHash {
    * least one of the 27 neighboring cells. Sharing a cell is necessary
    * but not sufficient for contact — exact distance checks belong to
    * the narrowphase.
+   *
+   * Ordered probing: each unordered cell-pair is visited exactly once,
+   * from the lower-keyed cell (neighbor key > cell key), plus one pass
+   * for the cell itself. This roughly halves the probe count versus
+   * gathering the full 27-neighborhood per body and needs no scratch
+   * allocations.
    */
   public queryPairs(emit: (i: number, j: number) => void): void {
     for (const [key, bucket] of this.cells) {
       const [cx, cy, cz] = demorton3D_10(key);
 
-      // Gather the occupied neighborhood once per cell (not once per body).
-      const neighbors: number[][] = [];
       for (let dx = -1; dx <= 1; dx += 1) {
+        const nx = cx + dx;
+        if (nx < 0 || nx > SpatialHash.MAX_COORD) continue;
         for (let dy = -1; dy <= 1; dy += 1) {
+          const ny = cy + dy;
+          if (ny < 0 || ny > SpatialHash.MAX_COORD) continue;
           for (let dz = -1; dz <= 1; dz += 1) {
-            const nx = cx + dx;
-            const ny = cy + dy;
             const nz = cz + dz;
-            if (nx < 0 || ny < 0 || nz < 0) continue;
-            if (nx > SpatialHash.MAX_COORD || ny > SpatialHash.MAX_COORD || nz > SpatialHash.MAX_COORD) {
-              continue;
-            }
-            const other = this.cells.get(morton3D_10(nx, ny, nz));
-            if (other) neighbors.push(other);
-          }
-        }
-      }
+            if (nz < 0 || nz > SpatialHash.MAX_COORD) continue;
 
-      for (const i of bucket) {
-        for (const other of neighbors) {
-          for (const j of other) {
-            if (j > i) emit(i, j);
+            const nkey = morton3D_10(nx, ny, nz);
+            if (nkey < key) continue; // already processed from the other side
+            const other = this.cells.get(nkey);
+            if (!other) continue;
+
+            if (nkey === key) {
+              // Same cell: unordered pairs within the bucket.
+              for (let a = 0; a < bucket.length - 1; a += 1) {
+                for (let b = a + 1; b < bucket.length; b += 1) {
+                  const i = bucket[a];
+                  const j = bucket[b];
+                  if (i < j) emit(i, j);
+                  else emit(j, i);
+                }
+              }
+            } else {
+              // Cross cell: every pairing, exactly once.
+              for (const i of bucket) {
+                for (const j of other) {
+                  if (i < j) emit(i, j);
+                  else emit(j, i);
+                }
+              }
+            }
           }
         }
       }
