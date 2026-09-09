@@ -2,7 +2,7 @@
 
 Flit is a tiny little physics engine for 3js. It doesn't do much yet! but I believe!
 
-Spheres, gravity, and a spatial-hash broadphase — nothing more, on purpose.
+Spheres, collisions, raycasts, gravity, and a spatial-hash broadphase — nothing more, on purpose.
 All simulation state lives in flat `Float32Array`s (structure-of-arrays), so
 the CPU path doubles as the reference implementation for a future WebGPU
 compute backend: same buffers, same kernels, no re-architecting.
