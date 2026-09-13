@@ -3,6 +3,34 @@
 All notable changes to Flit. Semver-ish while 0.x: minor = new features,
 patch = fixes.
 
+## Unreleased
+
+### Added
+
+- **`WorkerWorld`** (`src/threaded/`) — the engine now steps on a
+  background thread by default. `kick(dt)` starts a step and returns in
+  ~0.014 ms; `waitForUpdate()` resolves when it lands (`stepOnce()` =
+  both). Rendering reads `positions`, a tear-free ping-pong view into two
+  SharedArrayBuffers (zero-copy), with a structured-clone fallback when
+  SAB is unavailable (page not cross-origin isolated). Radii are mirrored
+  main-side from spawn specs; raycasts round-trip through the worker.
+  Fixed capacity (no growth) in threaded mode. `World` is untouched and
+  stays the sync reference — the worker is a wrapper, not a fork.
+  - Browser: default worker bundled via `new URL(..., import.meta.url)`.
+  - Node: pass a `node:worker_threads` Worker at `threaded/worker.node.js`.
+  - Tests run the real protocol over a same-thread MessageChannel,
+    including a 60-step sync-vs-worker parity check (identical to 6 dp).
+- Demo now runs threaded (`WorkerWorld` + COOP/COEP headers for SAB).
+
+### Performance (bench/threaded.bench.ts, real worker_threads + SAB)
+
+- `kick()`: 0.014 ms on the main thread (N=1024 and N=8192).
+- Frame time with a 4 ms render workload, N=8192: **8.84 ms pipelined vs
+  14.96 ms serial** (113 fps vs 67). N=1024: step fully hidden
+  (4.03 vs 4.80 ms).
+- Worker roundtrip ≈ sync step time (IPC overhead below measurement
+  noise at both scales).
+
 ## [0.2.2] — 2026-09-07
 
 Metadata-only release: adds the "Flit Physics" display title for the MCP

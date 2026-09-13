@@ -73,6 +73,13 @@ body); indices from `addParticle` are stable; use a fixed timestep;
 `world.count` is the live body count. Full working demo: `npm run demo` in
 the repo (220 balls, `?n=8000` for load testing).
 
+**Game/render loop? Prefer `WorkerWorld`** (same numbers, sim off the game
+thread): `const world = await WorkerWorld.create({...})`, `addParticles([...])`,
+then per frame `world.kick(1/60)` (false = step still in flight, skip) and
+render `world.positions` — tear-free SAB ping-pong, needs COOP/COEP headers,
+else copies. `await world.stepOnce(dt)` for lockstep. Fixed `capacity` up
+front. In Node pass a worker_threads Worker at `dist/threaded/worker.node.js`.
+
 ## Option B: no-code recipe (MCP server)
 
 For agents that should drive a sim without embedding the library, the repo
@@ -127,6 +134,7 @@ Typical flow: `flit_spawn({preset: "rain", count: 200})` → loop
 ## File map
 
 - `src/world.ts` — engine core (particles, integration, contact solver)
+- `src/threaded/` — WorkerWorld facade, worker-core protocol, web/node entries
 - `src/spatial-hash.ts` — Morton broadphase (ordered-probe visiting)
 - `src/morton.ts`, `src/bit-utils.ts`, `src/approx-distance.ts`,
   `src/distances-flann.ts` — utilities (see file headers for provenance)

@@ -2,9 +2,11 @@
 
 > Tiny sphere-physics engine for three.js games and demos: gravity, impulse
 > collisions, fixed-point LUT friction, voxel-walk raycasts, and a Morton
-> spatial-hash broadphase. TypeScript, CPU, single-threaded, zero native
-> dependencies. Ships an MCP server and an agent skill so coding agents can
-> wire physics into a scene themselves.
+> spatial-hash broadphase. TypeScript, CPU, zero native dependencies. Steps
+> on a background thread by default (WorkerWorld: kick/waitForUpdate,
+> SharedArrayBuffer zero-copy rendering; sync World available). Ships an MCP
+> server and an agent skill so coding agents can wire physics into a scene
+> themselves.
 
 ## Docs
 
@@ -24,4 +26,4 @@
 ## Optional
 
 - [Benchmarks](https://github.com/brashler/Flit/tree/main/bench): deterministic perf harness (broadphase, world step, scaling, codec bake-off)
-- [Tests](https://github.com/brashler/Flit/tree/main/test): vitest suite (57 tests)
+- [Tests](https://github.com/brashler/Flit/tree/main/test): vitest suite (64 tests)

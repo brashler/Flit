@@ -107,6 +107,11 @@ time (see commit messages for the full series, including rejected designs).
   (`npm run bench:libs`): ours 3.8 ns/encode, fast-morton MB 26.1,
   fast-morton LUT 43.8, @thi.ng/morton 539.9. In-house wins; the libs
   stay as devDependencies purely so the bake-off stays runnable.
+- `bench/threaded.bench.ts` — WorkerWorld over a real worker thread
+  (SAB ping-pong): `kick()` costs **0.014 ms** on the main thread; with a
+  4 ms render workload a frame costs **8.84 ms pipelined vs 14.96 ms
+  serial** at N=8192 (113 fps vs 67). At N=1024 the 0.8 ms step hides
+  entirely behind render (4.03 vs 4.80 ms).
 - Rejected on measurement (see commits): 63-bit BigInt keys (13× alloc
   regression); sorted-array + binary-search broadphase (1.4× slower
   than Map probing in JS — negative result recorded).
@@ -115,6 +120,8 @@ time (see commit messages for the full series, including rejected designs).
 
 - ~~Morton-ordered broadphase cells~~ — done, measured, shipped
 - ~~three.js demo scene~~ — `npm run demo`, 220 balls in a box
+- ~~Worker-threaded stepping~~ — `WorkerWorld`: kick/waitForUpdate, SAB
+  ping-pong zero-copy rendering
 - **Open issue:** settled-pile solver cost — see
   [`docs/issues/001-settled-pile-performance.md`](docs/issues/001-settled-pile-performance.md)
   (self-contained brief with repro, evidence, and definition of done;

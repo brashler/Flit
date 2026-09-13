@@ -16,7 +16,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { World } from 'flit';
+import { WorkerWorld } from 'flit';
 
 // Load testing: ?n=8000 cranks the ball count (clamped to [1, 20000]).
 const params = new URLSearchParams(location.search);
@@ -27,17 +27,31 @@ const BOX = {
   max: [9, 12, 9] as [number, number, number],
 };
 
-// ---------- physics ----------
-const world = new World({ restitution: 0.62, groundY: 0, bounds: BOX });
-for (let i = 0; i < COUNT; i += 1) {
+// ---------- physics (on a worker: the game thread never steps) ----------
+const world = await WorkerWorld.create({
+  restitution: 0.62,
+  groundY: 0,
+  bounds: BOX,
+  capacity: 20000, // threaded worlds don't grow; the ?n= clamp matches this
+});
+const specs = Array.from({ length: COUNT }, () => {
   const radius = 0.28 + Math.random() * 0.22;
-  world.addParticle({
-    position: [(Math.random() - 0.5) * 14, 4 + Math.random() * 8, (Math.random() - 0.5) * 14],
-    velocity: [(Math.random() - 0.5) * 6, Math.random() * 2, (Math.random() - 0.5) * 6],
+  return {
+    position: [(Math.random() - 0.5) * 14, 4 + Math.random() * 8, (Math.random() - 0.5) * 14] as [
+      number,
+      number,
+      number,
+    ],
+    velocity: [(Math.random() - 0.5) * 6, Math.random() * 2, (Math.random() - 0.5) * 6] as [
+      number,
+      number,
+      number,
+    ],
     radius,
     mass: radius ** 3, // density ~1: big balls push small balls around
-  });
-}
+  };
+});
+world.addParticles(specs);
 
 // ---------- rendering ----------
 const scene = new Scene();
@@ -100,7 +114,7 @@ function syncInstances(): void {
   balls.instanceMatrix.needsUpdate = true;
 }
 
-// ---------- main loop: fixed-step physics with an accumulator ----------
+// ---------- main loop: kick steps at the worker, render latest completed ----------
 const hud = document.getElementById('hud')!;
 let accumulator = 0;
 let last = performance.now();
@@ -115,12 +129,14 @@ renderer.setAnimationLoop(() => {
   last = now;
   frameMs = frameMs * 0.95 + frameDelta * 0.05; // smoothed, for fps
 
+  // Kick steps onto the worker; rendering never waits for physics. If the
+  // worker is still mid-step, kick() returns false and the time is dropped
+  // (accumulator is clamped above) instead of stalling the frame.
   while (accumulator >= DT) {
-    const t0 = performance.now();
-    world.step(DT);
-    stepMs = stepMs * 0.95 + (performance.now() - t0) * 0.05; // smoothed
+    if (!world.kick(DT)) break;
     accumulator -= DT;
   }
+  stepMs = stepMs * 0.95 + world.lastRoundtripMs * 0.05; // smoothed
 
   syncInstances();
   controls.update();
@@ -130,7 +146,8 @@ renderer.setAnimationLoop(() => {
   if (frame % 15 === 0) {
     hud.textContent =
       `flit demo | ${world.count} balls | ${(1000 / frameMs).toFixed(0)} fps | ` +
-      `step ${stepMs.toFixed(3)} ms\n?n=8000 to load test | drag to orbit, wheel to zoom`;
+      `worker step ${stepMs.toFixed(3)} ms roundtrip (${world.shared ? 'SAB zero-copy' : 'copy mode'})\n` +
+      `?n=8000 to load test | drag to orbit, wheel to zoom`;
   }
 });
 
