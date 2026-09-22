@@ -1,7 +1,8 @@
 # Flit (flit-physics)
 
 > Tiny sphere-physics engine for three.js games and demos: gravity, impulse
-> collisions, fixed-point LUT friction, voxel-walk raycasts, and a Morton
+> collisions, fixed-point LUT friction, voxel-walk raycasts, heightfield
+> terrain (no meshing), per-body sleep for quiet piles, and a Morton
 > spatial-hash broadphase. TypeScript, CPU, zero native dependencies. Steps
 > on a background thread by default (WorkerWorld: kick/waitForUpdate,
 > SharedArrayBuffer zero-copy rendering; sync World available). Ships an MCP
@@ -21,9 +22,9 @@
 - [npm package](https://www.npmjs.com/package/flit-physics): `npm i flit-physics`
 - [Demo scene](https://github.com/brashler/Flit/blob/main/demo/main.ts): the proven InstancedMesh integration pattern
 - [MCP server](https://github.com/brashler/Flit/blob/main/mcp/server.ts): stdio MCP tools (`flit_spawn`, `flit_step`, `flit_state`, `flit_raycast`, ...)
-- [Open issue brief](https://github.com/brashler/Flit/blob/main/docs/issues/001-settled-pile-performance.md): settled-pile solver cost, help wanted
+- [Issue brief 001](https://github.com/brashler/Flit/blob/main/docs/issues/001-settled-pile-performance.md): settled-pile solver cost -- RESOLVED by per-body sleep (34.2 -> 9.2 ms/step at N=8000); kept for the analysis and follow-up ideas
 
 ## Optional
 
 - [Benchmarks](https://github.com/brashler/Flit/tree/main/bench): deterministic perf harness (broadphase, world step, scaling, codec bake-off)
-- [Tests](https://github.com/brashler/Flit/tree/main/test): vitest suite (64 tests)
+- [Tests](https://github.com/brashler/Flit/tree/main/test): vitest suite (97 tests)

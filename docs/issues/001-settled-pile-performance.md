@@ -1,6 +1,14 @@
 # Issue 001 — Settled-pile step cost is contact-solver dominated
 
-**Status:** open, parked · **Area:** solver / performance · **Difficulty:** medium (directions 1-2), hard (direction 4)
+**Status:** RESOLVED (0.3.0, commit `d38d142`) — direction 1 shipped as
+per-body settling rather than island union-find: settled pile (WARMUP=240)
+N=8000 went **34.2 → 9.2 ms/step**, under the 16.67 ms definition of done,
+with no scattered-regime regression. Directions 2 (adaptive iterations),
+3 (warm starting) and 5 (solver micro-opts) remain open as follow-ups if
+more pile headroom is needed; the analysis below is kept because it is
+still the correct map of where the time goes while bodies are AWAKE.
+
+**Area:** solver / performance · **Difficulty:** medium (directions 1-2), hard (direction 4)
 
 ## Summary
 

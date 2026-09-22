@@ -44,6 +44,8 @@ const world = new World({
   restitution: 0.6,                       // bounciness, 0..1
   groundY: 0,                             // floor plane (null disables)
   bounds: { min: [-9, 0, -9], max: [9, 12, 9] }, // optional walls
+  // settleSpeed: 0.01,                   // sleep threshold m/s (default on; 0 disables)
+  // heightfield: new Heightfield({ rows, cols, cellSize, heights }), // 2.5D terrain, no meshing
 });
 for (let i = 0; i < 200; i++) {
   world.addParticle({
@@ -70,8 +72,11 @@ balls.instanceMatrix.needsUpdate = true;
 
 Key facts: `world.positions`/`velocities` are live flat `Float32Array`s (3 per
 body); indices from `addParticle` are stable; use a fixed timestep;
-`world.count` is the live body count. Full working demo: `npm run demo` in
-the repo (220 balls, `?n=8000` for load testing).
+`world.count` is the live body count; `world.settledCount` tells you how
+many bodies are asleep (a quiet pile costs ~nothing). `world.raycast(o, d)`
+returns hits sorted by distance — body indices, or `-1` for terrain.
+Full working demo: `npm run demo` in the repo (220 balls, `?n=8000` for
+load testing).
 
 **Game/render loop? Prefer `WorkerWorld`** (same numbers, sim off the game
 thread): `const world = await WorkerWorld.create({...})`, `addParticles([...])`,
@@ -97,10 +102,12 @@ ships an MCP server (stdio):
 }
 ```
 
-Tools: `flit_info` (meta) · `flit_reset` (gravity/restitution/ground/bounds) ·
-`flit_spawn` (presets: rain, explosion, grid, fountain — auto-configures
-matching world) · `flit_add_particles` · `flit_step` (returns flat xyz
-positions) · `flit_state` (positions + radii for InstancedMesh sync).
+Tools: `flit_info` (meta) · `flit_reset` (gravity/restitution/ground/
+bounds/settleSpeed/heightfield) · `flit_spawn` (presets: rain, explosion,
+grid, fountain — auto-configures matching world) · `flit_add_particles` ·
+`flit_step` (returns flat xyz positions + settledCount) · `flit_state`
+(positions + radii for InstancedMesh sync) · `flit_raycast` (hits sorted
+by distance; index -1 = terrain).
 
 Typical flow: `flit_spawn({preset: "rain", count: 200})` → loop
 `flit_step({steps: 1})` and copy `positions` into instance matrices.
@@ -109,11 +116,12 @@ Typical flow: `flit_spawn({preset: "rain", count: 200})` → loop
 
 - ~0.93 ms/step at 1,000 bodies; flat O(N) ≈ 1.2 ms per 1,000 at constant
   density through 8,000 while bodies are scattered.
-- Caveat: with gravity, bodies rain into dense floor piles within ~2-4s;
-  settled piles are contact-solver dominated (~4.3 ms per 1,000 at 8k).
-  Keep games in the sparse-to-medium regime, or pursue
-  `docs/issues/001-settled-pile-performance.md` (open, self-contained
-  brief: island sleeping, adaptive iterations, warm starting).
+- With gravity, bodies rain into dense floor piles within ~2-4s — and
+  then SETTLE (sleep is on by default): 34.2 → 9.2 ms/step at N=8000
+  (measured, WARMUP=240). Settled bodies are skipped by integration,
+  planes, and mutual contacts until a >1 m/s impact wakes them.
+- Raycast: 63-68 µs/ray at N=4096 (bounded walk; faster than a
+  brute-force O(N) oracle from ~1k bodies up).
 
 ## Rules for working ON the engine (contributing agents)
 
@@ -133,7 +141,9 @@ Typical flow: `flit_spawn({preset: "rain", count: 200})` → loop
 
 ## File map
 
-- `src/world.ts` — engine core (particles, integration, contact solver)
+- `src/world.ts` — engine core (particles, integration, contact solver,
+  settling, raycast)
+- `src/heightfield.ts` — 2.5D terrain (sampling, contact, DDA raycast)
 - `src/threaded/` — WorkerWorld facade, worker-core protocol, web/node entries
 - `src/spatial-hash.ts` — Morton broadphase (ordered-probe visiting)
 - `src/morton.ts`, `src/bit-utils.ts`, `src/approx-distance.ts`,

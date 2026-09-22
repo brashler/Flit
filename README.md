@@ -11,6 +11,16 @@ compute backend: same buffers, same kernels, no re-architecting.
 
 - **`World`** — point-sphere particles, semi-implicit Euler integration,
   impulse + positional-correction contact solver, infinite ground plane.
+  Bodies that stay quiet SETTLE (per-body sleep driven by a stiction
+  threshold), so resting piles cost ~nothing; a fast-enough impact wakes
+  them, a slow push is held by static friction.
+- **`Heightfield`** — 2.5D terrain as a grid of height posts, no meshing:
+  bilinear height + central-difference normals sampled directly for
+  collision, and a 2D Amanatides-Woo DDA for raycasts (`index: -1`).
+- **Raycast** — Amanatides-Woo voxel walk over the broadphase grid;
+  candidates from the 3x3x3 block around the walked path so corner
+  clips are never missed. Differential-tested against a brute-force
+  oracle.
 - **`SpatialHash`** — uniform grid broadphase keyed by Morton (Z-order)
   cell codes. This is the Euclidean cousin in the LSH family: MinHash
   buckets documents by Jaccard similarity; this buckets positions so
@@ -44,9 +54,11 @@ Building a little three.js game or demo? Two ways in:
 }
 ```
 
-Tools: `flit_info`, `flit_reset`, `flit_spawn` (rain/explosion/grid/fountain
-presets), `flit_add_particles`, `flit_step`, `flit_state` — the last two
-return flat xyz positions shaped for `InstancedMesh` syncing.
+Tools: `flit_info`, `flit_reset` (gravity/restitution/ground/bounds/
+settleSpeed/heightfield), `flit_spawn` (rain/explosion/grid/fountain
+presets), `flit_add_particles`, `flit_step`, `flit_state`, `flit_raycast`
+— step/state return flat xyz positions shaped for `InstancedMesh` syncing
+plus `settledCount`, so you can watch a pile go quiet.
 
 ## Usage
 
@@ -72,6 +84,20 @@ mesh.position.set(
 );
 ```
 
+Terrain and sleep are one option each:
+
+```ts
+import { Heightfield, World } from 'flit-physics';
+
+const terrain = new Heightfield({ rows: 64, cols: 64, cellSize: 1, heights });
+const world = new World({ groundY: null, heightfield: terrain });
+// bodies collide with the terrain and settle on it;
+// world.raycast(...) reports terrain hits as index -1
+
+// sleep is on by default (settleSpeed 0.01 m/s); opt out per world:
+const wideAwake = new World({ settleSpeed: 0 });
+```
+
 ## Develop
 
 ```bash
@@ -94,15 +120,19 @@ time (see commit messages for the full series, including rejected designs).
   xor-hash 0.85 ms/step → Morton ordered-probing 0.83 ms/step →
   **0.93 ms/step** with the sequential-impulse velocity solver
   (4 iterations + LUT friction). Exact keys, real contacts, +11%.
-- `bench/scaling.bench.ts` — two regimes, and one important caveat.
-  Fixed box (density rises): pairs scale ~N² from crowding physics.
-  Scaled box (constant *spawn* density): flat O(N) ≈ 1.2 ms per 1000
-  through N=8000 — **but only while bodies are scattered**. The
-  caveat: with gravity on, everything rains into a dense floor pile
-  over ~2-4s (`WARMUP=240` to reproduce), and steady-state piles are
-  contact-solver dominated: ~4.3 ms per 1000 at N=8000 (87k contacts
-  x 4 iterations), putting the 60fps pile budget near 3k bodies.
-  The known fix for piles is island sleeping / agglomeration — parked.
+- `bench/scaling.bench.ts` — two regimes. Fixed box (density rises):
+  pairs scale ~N² from crowding physics. Scaled box (constant *spawn*
+  density): flat O(N) ≈ 1.2 ms per 1000 through N=8000 while bodies are
+  scattered. With gravity on, everything rains into a dense floor pile
+  over ~2-4s (`WARMUP=240` to reproduce) — and since 0.3.0 the pile
+  SETTLES: **34.2 → 9.2 ms/step at N=8000** (3.7x, inside the 60fps
+  budget) as bodies fall asleep bottom-up. Settled bodies are skipped
+  by integration, planes, and mutual contacts until a >1 m/s impact
+  wakes them. (`docs/issues/001` — resolved; brief kept for the
+  analysis and the remaining ideas: warm starting, adaptive iterations.)
+- `bench/raycast.bench.ts` — 2000 seeded rays at N=4096:
+  **63–68 µs/ray** (vs ~160 µs for a brute-force O(N) oracle at the
+  same density; the grid walk pulls further ahead as N grows).
 - `bench/morton-libs.bench.ts` — codec bake-off vs npm libs
   (`npm run bench:libs`): ours 3.8 ns/encode, fast-morton MB 26.1,
   fast-morton LUT 43.8, @thi.ng/morton 539.9. In-house wins; the libs
@@ -122,10 +152,13 @@ time (see commit messages for the full series, including rejected designs).
 - ~~three.js demo scene~~ — `npm run demo`, 220 balls in a box
 - ~~Worker-threaded stepping~~ — `WorkerWorld`: kick/waitForUpdate, SAB
   ping-pong zero-copy rendering
-- **Open issue:** settled-pile solver cost — see
-  [`docs/issues/001-settled-pile-performance.md`](docs/issues/001-settled-pile-performance.md)
-  (self-contained brief with repro, evidence, and definition of done;
-  suitable for an agent or human to pick up)
+- ~~Settled-pile solver cost~~ — per-body sleep shipped (34.2 → 9.2 ms
+  at N=8000); [issue brief](docs/issues/001-settled-pile-performance.md)
+  kept for the remaining ideas (warm starting, adaptive iterations)
+- ~~Heightfield terrain~~ — shipped, no meshing; hooks left for more
+  collider shapes
+- Raycast coarse occupancy filter (skip empty space faster) if
+  ray-heavy workloads show up — see commit `3173a6f` for the analysis
 - WebGPU compute backend once the CPU reference settles
 
 ## License

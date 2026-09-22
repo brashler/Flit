@@ -11,8 +11,9 @@ map.
 - The 30-second three.js recipe and the no-code MCP option live in
   `skills/flit/SKILL.md` — read it first; it is written for you.
 - Measured performance envelope: ~0.93 ms/step at 1k bodies, flat O(N) to
-  ~8k while scattered; dense settled piles are the known wall (see
-  `docs/issues/001-settled-pile-performance.md`).
+  ~8k while scattered; settled piles go quiet via per-body sleep (34.2
+  → 9.2 ms/step at 8k; `docs/issues/001-settled-pile-performance.md`,
+  resolved, kept for the awake-state analysis and follow-up ideas).
 
 ## Working on the engine
 
