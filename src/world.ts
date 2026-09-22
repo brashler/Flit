@@ -232,7 +232,11 @@ export class World {
 
   /**
    * Cast a ray through the broadphase grid (Amanatides-Woo voxel walk,
-   * treating the Morton cells as the voxel discretization). Returns hits
+   * treating the Morton cells as the voxel discretization). Candidates
+   * come from the 3x3x3 block around each walked cell: a sphere is stored
+   * only in its center cell but bulges up to cellSize/2 into the 26
+   * neighbors (r <= maxRadius = cellSize/2), so center-cell-only probing
+   * would miss grazing corner hits. Returns hits
    * sorted by distance. Uses the broadphase state from the last step()
    * (rebuilt automatically if particles were added since); if you moved
    * bodies by writing into `positions` directly, call syncBroadphase()
@@ -267,38 +271,77 @@ export class World {
 
     const hits: RayHit[] = [];
     this.rayId += 1;
-    const stamp = this.rayStamp;
     let t = 0;
+
+    // Candidate bodies live in the 3x3x3 block around each walked cell
+    // (see doc comment: the bulge reach). Probing the whole block per cell
+    // would re-fetch 26 overlapping buckets per step, so probe the full
+    // block only for the origin cell; afterwards just the 9-cell leading
+    // face the slide exposes. The stamp keeps each body tested once per ray.
+    for (let ox = -1; ox <= 1; ox += 1) {
+      for (let oy = -1; oy <= 1; oy += 1) {
+        for (let oz = -1; oz <= 1; oz += 1) {
+          this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + oy, cz + oz);
+        }
+      }
+    }
 
     // Walk voxels in ray order until we pass maxDistance (or run away).
     for (let guard = 0; guard < 4096 && t <= maxDistance; guard += 1) {
-      const bucket = this.hash.getCellBodies(cx, cy, cz);
-      if (bucket) {
-        for (const i of bucket) {
-          if (stamp[i] === this.rayId) continue; // spans multiple cells: test once
-          stamp[i] = this.rayId;
-          const hit = this.raySphere(i, origin, dx, dy, dz, maxDistance);
-          if (hit) hits.push(hit);
-        }
-      }
-
       if (tMaxX <= tMaxY && tMaxX <= tMaxZ) {
         t = tMaxX;
         tMaxX += tDeltaX;
         cx += stepX;
+        for (let oy = -1; oy <= 1; oy += 1) {
+          for (let oz = -1; oz <= 1; oz += 1) {
+            this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + stepX, cy + oy, cz + oz);
+          }
+        }
       } else if (tMaxY <= tMaxZ) {
         t = tMaxY;
         tMaxY += tDeltaY;
         cy += stepY;
+        for (let ox = -1; ox <= 1; ox += 1) {
+          for (let oz = -1; oz <= 1; oz += 1) {
+            this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + stepY, cz + oz);
+          }
+        }
       } else {
         t = tMaxZ;
         tMaxZ += tDeltaZ;
         cz += stepZ;
+        for (let ox = -1; ox <= 1; ox += 1) {
+          for (let oy = -1; oy <= 1; oy += 1) {
+            this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + oy, cz + stepZ);
+          }
+        }
       }
     }
 
     hits.sort((a, b) => a.distance - b.distance);
     return hits;
+  }
+
+  /** Test the unstamped bodies of one grid cell against the active ray. */
+  private testRayCell(
+    hits: RayHit[],
+    origin: [number, number, number],
+    dx: number,
+    dy: number,
+    dz: number,
+    maxDistance: number,
+    cellX: number,
+    cellY: number,
+    cellZ: number,
+  ): void {
+    const bucket = this.hash.getCellBodies(cellX, cellY, cellZ);
+    if (!bucket) return;
+    for (const i of bucket) {
+      if (this.rayStamp[i] === this.rayId) continue; // spans cells: test once
+      this.rayStamp[i] = this.rayId;
+      const hit = this.raySphere(i, origin, dx, dy, dz, maxDistance);
+      if (hit) hits.push(hit);
+    }
   }
 
   /** Rebuild the broadphase from current positions (raycast freshness). */
