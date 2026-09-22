@@ -1,3 +1,4 @@
+import { Heightfield } from '../heightfield.js';
 import { World } from '../world.js';
 import { listen, send, type PortLike } from './ports.js';
 import type { MainToWorker, WorkerToMain } from './protocol.js';
@@ -28,7 +29,13 @@ export function install(port: PortLike, closeSelf: () => void): void {
       switch (message.type) {
         case 'init': {
           capacity = message.capacity;
-          world = new World({ ...message.options, capacity });
+          const { heightfield, ...rest } = message.options;
+          world = new World({
+            ...rest,
+            capacity,
+            // Terrain crosses as a plain spec (see protocol.ts).
+            heightfield: heightfield ? new Heightfield(heightfield) : null,
+          });
           shared = message.shared;
           reply({ type: 'ready', shared: shared !== null });
           break;

@@ -76,6 +76,41 @@ describe('WorkerWorld (shared SAB mode)', () => {
     world.dispose();
   });
 
+  it('runs heightfield terrain passed as a plain spec', async () => {
+    const world = await makeWorld({
+      groundY: null,
+      heightfield: { rows: 2, cols: 2, cellSize: 10, origin: [-5, 0, -5], heights: [2, 2, 2, 2] },
+    });
+    world.addParticles([{ position: [0, 5, 0], radius: 0.5 }]);
+    for (let i = 0; i < 240; i += 1) await world.stepOnce();
+    expect(world.positions[1]).toBeCloseTo(2.5, 2);
+    const hits = await world.raycast([0, 5, 0], [0, -1, 0]);
+    expect(hits).toHaveLength(2);
+    expect(hits[0].index).toBe(0); // the (settled) ball still reports
+    expect(hits[1].index).toBe(-1); // terrain behind it
+    world.dispose();
+  });
+
+  it('accepts a Heightfield instance and copies it to the worker', async () => {
+    const { Heightfield } = await import('../src/heightfield.js');
+    const field = new Heightfield({
+      rows: 2,
+      cols: 2,
+      cellSize: 10,
+      origin: [-5, 0, -5],
+      heights: [3, 3, 3, 3],
+    });
+    const world = await makeWorld({ groundY: null, heightfield: field });
+    world.addParticles([{ position: [0, 6, 0], radius: 0.5 }]);
+    for (let i = 0; i < 240; i += 1) await world.stepOnce();
+    expect(world.positions[1]).toBeCloseTo(3.5, 2);
+    // Later edits to the caller's instance do not propagate; the worker owns its copy.
+    field.setHeight(0, 0, -10);
+    await world.stepOnce();
+    expect(world.positions[1]).toBeCloseTo(3.5, 2);
+    world.dispose();
+  });
+
   it('rejects immediately when capacity would be exceeded', async () => {
     const world = await makeWorld({ capacity: 2 });
     world.addParticles([{ position: [0, 1, 0] }, { position: [1, 1, 0] }]);

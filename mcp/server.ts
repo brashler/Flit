@@ -10,10 +10,29 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { World } from 'flit-physics';
+import { Heightfield, World } from 'flit-physics';
 
 const vec3Schema = z.tuple([z.number(), z.number(), z.number()]);
 const MAX_PARTICLES = 5000;
+const MAX_TERRAIN_POSTS = 262144;
+
+const heightfieldSchema = z
+  .object({
+    rows: z.number().int().min(2).describe('z posts'),
+    cols: z.number().int().min(2).describe('x posts'),
+    cellSize: z.number().positive().describe('World spacing between posts'),
+    heights: z
+      .array(z.number())
+      .optional()
+      .describe('rows*cols heights, row-major. Default flat 0'),
+    origin: vec3Schema.optional().describe('World position of sample (0,0). Default [0,0,0]'),
+  })
+  .refine((h) => h.rows * h.cols <= MAX_TERRAIN_POSTS, {
+    message: `rows*cols must be <= ${MAX_TERRAIN_POSTS}`,
+  })
+  .refine((h) => h.heights === undefined || h.heights.length === h.rows * h.cols, {
+    message: 'heights must have rows*cols entries',
+  });
 
 let world = new World();
 
@@ -32,7 +51,7 @@ const flatRadii = (): number[] => {
 
 const server = new McpServer({
   name: 'flit',
-  version: '0.1.0',
+  version: '0.2.0',
 });
 
 server.registerTool(
@@ -54,6 +73,15 @@ server.registerTool(
       gravity: Array.from(world.gravity),
       restitution: world.restitution,
       groundY: world.groundY,
+      settleSpeed: world.settleSpeed,
+      settledCount: world.settledCount,
+      heightfield: world.heightfield
+        ? {
+            rows: world.heightfield.rows,
+            cols: world.heightfield.cols,
+            cellSize: world.heightfield.cellSize,
+          }
+        : null,
       bounds: world.bounds
         ? { min: Array.from(world.bounds.min), max: Array.from(world.bounds.max) }
         : null,
@@ -69,6 +97,15 @@ server.registerTool(
       gravity: vec3Schema.optional().describe('Default [0, -9.81, 0]'),
       restitution: z.number().min(0).max(1).optional().describe('0 = clay, 1 = superball. Default 0.4'),
       groundY: z.number().nullable().optional().describe('Floor plane height. Default 0, null disables'),
+      settleSpeed: z
+        .number()
+        .min(0)
+        .optional()
+        .describe('Stiction/sleep threshold (m/s). Bodies quiet this long settle and cost ~nothing. Default 0.01; 0 disables'),
+      heightfield: heightfieldSchema
+        .nullable()
+        .optional()
+        .describe('2.5D heightfield terrain (no meshing). Pair with groundY null'),
       bounds: z
         .object({ min: vec3Schema, max: vec3Schema })
         .nullable()
@@ -80,7 +117,9 @@ server.registerTool(
     world = new World({
       gravity: args.gravity,
       restitution: args.restitution,
+      settleSpeed: args.settleSpeed,
       groundY: args.groundY === undefined ? undefined : args.groundY,
+      heightfield: args.heightfield ? new Heightfield(args.heightfield) : null,
       bounds: args.bounds === undefined ? undefined : args.bounds,
     });
     return asJson({ ok: true, count: world.count });
@@ -198,7 +237,13 @@ server.registerTool(
     const t0 = performance.now();
     for (let s = 0; s < steps; s += 1) world.step(dt);
     const msPerStep = (performance.now() - t0) / steps;
-    return asJson({ steps, msPerStep, count: world.count, positions: flatPositions() });
+    return asJson({
+      steps,
+      msPerStep,
+      count: world.count,
+      settledCount: world.settledCount,
+      positions: flatPositions(),
+    });
   },
 );
 
@@ -209,7 +254,13 @@ server.registerTool(
     description: 'Flat xyz positions + per-ball radii (for InstancedMesh sync).',
     inputSchema: {},
   },
-  async () => asJson({ count: world.count, positions: flatPositions(), radii: flatRadii() }),
+  async () =>
+    asJson({
+      count: world.count,
+      settledCount: world.settledCount,
+      positions: flatPositions(),
+      radii: flatRadii(),
+    }),
 );
 
 server.registerTool(
@@ -217,8 +268,9 @@ server.registerTool(
   {
     title: 'Raycast',
     description:
-      'Cast a ray through the scene (Amanatides-Woo voxel walk over the broadphase grid). ' +
-      'Returns hits sorted by distance: body index, distance, point, normal.',
+      'Cast a ray through the scene (Amanatides-Woo voxel walk over the broadphase grid ' +
+      'plus heightfield terrain). Returns hits sorted by distance: body index (-1 for ' +
+      'terrain), distance, point, normal.',
     inputSchema: {
       origin: vec3Schema,
       direction: vec3Schema.describe('Need not be normalized'),

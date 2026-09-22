@@ -1,8 +1,16 @@
+import { Heightfield, type HeightfieldSpec } from '../heightfield.js';
 import type { ParticleSpec, RayHit, WorldOptions } from '../world.js';
 import { listen, send, type PortLike } from './ports.js';
 import type { MainToWorker, WorkerToMain } from './protocol.js';
 
-export interface WorkerWorldOptions extends WorldOptions {
+export interface WorkerWorldOptions extends Omit<WorldOptions, 'heightfield'> {
+  /**
+   * Heightfield terrain: a plain HeightfieldSpec (crosses the worker
+   * boundary as JSON) or a Heightfield instance to copy from. The worker
+   * owns the terrain it builds; later edits to your instance do not
+   * propagate.
+   */
+  heightfield?: HeightfieldSpec | Heightfield | null;
   /**
    * Injected worker/port. Default: a browser Worker bundled from
    * `./worker.web` (Vite/webpack URL pattern). In Node, pass a
@@ -134,17 +142,30 @@ export class WorkerWorld {
    * `capacity` (default 1024) is fixed for the world's lifetime.
    */
   public static async create(options: WorkerWorldOptions = {}): Promise<WorkerWorld> {
-    const { worker, forceCopyMode, ...worldOptions } = options;
+    const { worker, forceCopyMode, heightfield, ...worldOptions } = options;
     const ownPort = worker === undefined;
     const port = worker ?? defaultWorker();
     const capacity = worldOptions.capacity ?? 1024;
     const canShare = !forceCopyMode && typeof SharedArrayBuffer !== 'undefined';
 
+    // Terrain crosses the wire as a plain spec (structured clone would
+    // strip an instance's methods); the worker rebuilds the Heightfield.
+    const heightfieldSpec: HeightfieldSpec | null | undefined =
+      heightfield instanceof Heightfield
+        ? {
+            rows: heightfield.rows,
+            cols: heightfield.cols,
+            cellSize: heightfield.cellSize,
+            heights: heightfield.heights,
+            origin: heightfield.origin,
+          }
+        : heightfield;
+
     const world = new WorkerWorld(port, ownPort, capacity, canShare);
     try {
       const init: MainToWorker = {
         type: 'init',
-        options: worldOptions,
+        options: { ...worldOptions, heightfield: heightfieldSpec },
         capacity,
         shared: world.sharedBuffers ? { positions: world.sharedBuffers } : null,
       };

@@ -60,6 +60,27 @@ describe('flit MCP server', () => {
         const ray = await callJson(client, 'flit_raycast', { origin: [0, 0, 0], direction: [1, 0, 0] });
         expect(ray.hits).toHaveLength(1);
         expect(ray.hits[0].distance).toBeCloseTo(2.5, 4);
+
+        // Heightfield terrain over MCP: a ball rests, settles, and the
+        // terrain raycast reports index -1 behind the body hit.
+        await callJson(client, 'flit_reset', {
+          groundY: null,
+          heightfield: { rows: 2, cols: 2, cellSize: 10, origin: [-5, 0, -5], heights: [2, 2, 2, 2] },
+        });
+        const info2 = await callJson(client, 'flit_info');
+        expect(info2.heightfield).toEqual({ rows: 2, cols: 2, cellSize: 10 });
+        await callJson(client, 'flit_add_particles', { particles: [{ position: [0, 5, 0], radius: 0.5 }] });
+        const terrainStep = await callJson(client, 'flit_step', { steps: 240 });
+        expect(terrainStep.positions[1]).toBeCloseTo(2.5, 2);
+        expect(terrainStep.settledCount).toBe(1);
+        const terrainRay = await callJson(client, 'flit_raycast', {
+          origin: [0, 5, 0],
+          direction: [0, -1, 0],
+        });
+        expect(terrainRay.hits).toHaveLength(2);
+        expect(terrainRay.hits[0].index).toBe(0); // the settled ball still reports
+        expect(terrainRay.hits[1].index).toBe(-1); // terrain behind it
+        expect(terrainRay.hits[1].distance).toBeCloseTo(3, 3);
       } finally {
         await client.close();
       }

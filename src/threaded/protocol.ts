@@ -1,4 +1,14 @@
+import type { HeightfieldSpec } from '../heightfield.js';
 import type { ParticleSpec, RayHit, WorldOptions } from '../world.js';
+
+/**
+ * WorldOptions as they cross the wire: a Heightfield class instance would
+ * arrive methodless after structured clone, so terrain travels as its
+ * plain spec and the worker constructs the Heightfield on its side.
+ */
+export type WireWorldOptions = Omit<WorldOptions, 'heightfield'> & {
+  heightfield?: HeightfieldSpec | null;
+};
 
 /**
  * Wire protocol between WorkerWorld (main thread) and the sim worker.
@@ -17,7 +27,7 @@ import type { ParticleSpec, RayHit, WorldOptions } from '../world.js';
 export type MainToWorker =
   | {
       type: 'init';
-      options: WorldOptions;
+      options: WireWorldOptions;
       /** Fixed particle capacity. Threaded worlds never grow (the ping-pong
        *  buffers are sized at init), so pick this up front. */
       capacity: number;
