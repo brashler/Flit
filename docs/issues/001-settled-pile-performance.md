@@ -74,6 +74,16 @@ npx vite-node bench/world.bench.ts            # N=1024 baseline: ~0.93 ms/step
    scale iterations down as contact count grows (4 at 1k contacts is not
    the right spend at 87k). Measure quality impact on the elastic-swap
    and pile-stability tests before and after.
+   **REJECTED BY MEASUREMENT (0.3.0-era, direction 2a):** an early-out on
+   max applied relative-velocity change (normal impulse AND friction,
+   squared, epsilon 1e-4 m/s) measured within noise on every regime
+   (N=8000: W30 A 23.2->24.5 / B 10.3->10.5; W240 A 9.5->9.3 / B 8.7->8.9;
+   world.bench N=1024 1.06-1.11 vs 1.07-1.15 interleaved). Why: settled
+   contacts are already dropped by sleep, and any contact that remains
+   has real friction work nearly every iteration (the friction-inclusive
+   metric is load-bearing -- a normal-only metric broke the LUT friction
+   test by starving sliding contacts of iterations). A max-tracking loop
+   for zero measured win is a rejection, not a ship.
 3. **Warm starting (medium).** Persist per-contact accumulated normal
    impulses across frames, keyed by body-index pair (a Map keyed by
    `i * 2^32 + j` or by reusing contact slots when the same pair repeats).
