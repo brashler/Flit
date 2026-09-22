@@ -59,10 +59,12 @@ export function install(port: PortLike, closeSelf: () => void): void {
             const back = 1 - readBuf;
             shared.positions[back].set(world.positions.subarray(0, world.count * 3));
             readBuf = back;
-            reply({ type: 'stepped', step, buf: back });
+            reply({ type: 'stepped', step, buf: back, settledCount: world.settledCount });
           } else {
             const copy = world.positions.slice(0, world.count * 3);
-            reply({ type: 'stepped', step, buf: 0, positions: copy }, [copy.buffer]);
+            reply({ type: 'stepped', step, buf: 0, positions: copy, settledCount: world.settledCount }, [
+              copy.buffer,
+            ]);
           }
           break;
         }

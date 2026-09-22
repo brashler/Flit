@@ -75,6 +75,7 @@ export class WorkerWorld {
   private copyPositions: Float32Array = new Float32Array(0);
   private readBuf = 0;
   private countMirror = 0;
+  private settledMirror = 0;
   private readonly radiiMirror: Float32Array;
   private stepSeen = 0;
   private inFlight = false;
@@ -120,6 +121,7 @@ export class WorkerWorld {
         case 'stepped':
           this.readBuf = message.buf;
           if (message.positions) this.copyPositions = message.positions;
+          this.settledMirror = message.settledCount;
           this.completeStep(message.step);
           break;
         case 'raycast-result': {
@@ -190,6 +192,11 @@ export class WorkerWorld {
 
   public get count(): number {
     return this.countMirror;
+  }
+
+  /** Bodies asleep after the latest COMPLETED step (see World.settledCount). */
+  public get settledCount(): number {
+    return this.settledMirror;
   }
 
   /** Wall-clock ms of the last kick()→completion roundtrip, Date.now-based. */

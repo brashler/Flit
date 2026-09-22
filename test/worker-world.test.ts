@@ -63,6 +63,7 @@ describe('WorkerWorld (shared SAB mode)', () => {
     const y = world.positions[1];
     expect(y).toBeGreaterThan(0.49);
     expect(y).toBeLessThan(0.51);
+    expect(world.settledCount).toBe(1); // sleep state mirrors over the wire
     world.dispose();
   });
 

@@ -48,6 +48,6 @@ export type MainToWorker =
 export type WorkerToMain =
   | { type: 'ready'; shared: boolean }
   /** `buf` is the ping-pong index the renderer may now read (shared mode). */
-  | { type: 'stepped'; step: number; buf: number; positions?: Float32Array }
+  | { type: 'stepped'; step: number; buf: number; positions?: Float32Array; settledCount: number }
   | { type: 'raycast-result'; id: number; hits: RayHit[] }
   | { type: 'error'; message: string };

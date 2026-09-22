@@ -183,7 +183,7 @@ renderer.setAnimationLoop(() => {
   frame += 1;
   if (frame % 15 === 0) {
     hud.textContent =
-      `flit demo | ${world.count} balls | ${(1000 / frameMs).toFixed(0)} fps | ` +
+      `flit demo | ${world.count} balls (${world.settledCount} settled) | ${(1000 / frameMs).toFixed(0)} fps | ` +
       `worker step ${stepMs.toFixed(3)} ms roundtrip (${world.shared ? 'SAB zero-copy' : 'copy mode'})\n` +
       `?n=8000 load test | ?terrain hills | drag to orbit, wheel to zoom`;
   }
