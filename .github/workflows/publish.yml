@@ -1,0 +1,64 @@
+# Publish flit-physics to npm when a version tag is pushed (or manually).
+#
+# One-time setup (repo admin, ~2 minutes, once ever):
+#   1. npmjs.com -> Access Tokens -> Granular Access Token with read+write
+#      on the flit-physics package (or a classic Automation token).
+#   2. github.com/brashler/Flit -> Settings -> Secrets and variables
+#      -> Actions -> New repository secret: NPM_TOKEN = that token.
+#
+# To publish a release:
+#   git tag vX.Y.Z && git push origin vX.Y.Z
+# (the tag MUST equal package.json "version" -- a guard step enforces it)
+# or: Actions -> "Publish to npm" -> Run workflow (publishes whatever
+# version is in package.json at HEAD).
+#
+# Why this exists: local npm tokens expire and laptops come and go. The
+# registry token lives in exactly one place (the repo secret), and every
+# publish is gated by the full test suite plus an attested provenance
+# statement (--provenance, via GitHub OIDC).
+name: Publish to npm
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # npm --provenance (OIDC attestation)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Tag must match package.json version
+        if: github.event_name == 'push'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG does not match package.json version $PKG"
+            exit 1
+          fi
+          echo "version check: v$TAG == package.json $PKG"
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test (98 tests incl. MCP-over-stdio)
+        run: npm test
+
+      - name: Publish
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
