@@ -26,8 +26,19 @@ export class SpatialHash {
   /** Morton key of cell -> body indices in that cell. */
   private readonly cells = new Map<number, number[]>();
 
+  /**
+   * Coarse occupancy grid (4x4x4 fine cells per coarse cell): key -> live
+   * body count. Lets voxel walks skip 27-neighborhood probes in
+   * guaranteed-empty space (raycast filter). Built LAZILY from `cells` on
+   * first use after a mutation and rebuilt whenever the grid changed --
+   * simulations that never raycast pay nothing for it.
+   */
+  private readonly coarse = new Map<number, number>();
+  private coarseDirty = true;
+
   private static readonly COORD_BIAS = 1 << 9; // 512: coords live in [0, 1023]
   private static readonly MAX_COORD = 0x3ff; // 10 bits per axis
+  private static readonly COARSE_SHIFT = 2; // 2^2 fine cells per coarse axis
 
   constructor(cellSize = 1) {
     if (!(cellSize > 0)) {
@@ -38,6 +49,7 @@ export class SpatialHash {
 
   public clear(): void {
     this.cells.clear();
+    this.coarseDirty = true;
   }
 
   /** Insert a body index at a position. */
@@ -49,6 +61,39 @@ export class SpatialHash {
     } else {
       this.cells.set(key, [index]);
     }
+    this.coarseDirty = true;
+  }
+
+  /**
+   * True if any coarse cell overlapping the (inclusive) fine-cell range
+   * [f0..f1] holds at least one body. A false answer is a GUARANTEE of no
+   * body centers in the range -- used to skip fine probes in empty space.
+   */
+  public coarseRegionOccupied(
+    fx0: number,
+    fy0: number,
+    fz0: number,
+    fx1: number,
+    fy1: number,
+    fz1: number,
+  ): boolean {
+    if (this.coarseDirty) this.rebuildCoarse();
+    const b = SpatialHash.COORD_BIAS;
+    const sh = SpatialHash.COARSE_SHIFT;
+    const cx0 = SpatialHash.clampCoord(fx0 + b) >> sh;
+    const cy0 = SpatialHash.clampCoord(fy0 + b) >> sh;
+    const cz0 = SpatialHash.clampCoord(fz0 + b) >> sh;
+    const cx1 = SpatialHash.clampCoord(fx1 + b) >> sh;
+    const cy1 = SpatialHash.clampCoord(fy1 + b) >> sh;
+    const cz1 = SpatialHash.clampCoord(fz1 + b) >> sh;
+    for (let cx = cx0; cx <= cx1; cx += 1) {
+      for (let cy = cy0; cy <= cy1; cy += 1) {
+        for (let cz = cz0; cz <= cz1; cz += 1) {
+          if (this.coarse.has(morton3D_10(cx, cy, cz))) return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -113,6 +158,39 @@ export class SpatialHash {
       Math.floor(y / this.cellSize),
       Math.floor(z / this.cellSize),
     );
+  }
+
+  /** Coarse-grid key from BIASED fine coords (already bias-applied + clamped). */
+  private static coarseKeyFromBiased(bx: number, by: number, bz: number): number {
+    const sh = SpatialHash.COARSE_SHIFT;
+    return morton3D_10(bx >> sh, by >> sh, bz >> sh);
+  }
+
+  /**
+   * Rebuild the coarse occupancy counts from the live cell map. Coarse
+   * keys come straight out of the fine Morton key with bit surgery: the
+   * coarse grid drops the low 2 bits of each 10-bit axis field, and in a
+   * dilated key those fields live 6 bit-positions apart, so the coarse
+   * key is three masked shifts -- no de-lace, no tuple allocation.
+   */
+  private rebuildCoarse(): void {
+    this.coarse.clear();
+    // Masks, 30-bit morton3D_10 lane convention (x at 3i, y at 3i+1, z at
+    // 3i+2): per-axis dilated fields and the 8 coarse bits per axis left
+    // after dropping the low 2 fine bits (a 6-bit shift of the dilated key).
+    const MX = 0x9249249;
+    const MY = 0x12492492;
+    const MZ = 0x24924924;
+    const CX = 0x249249;
+    const CY = 0x492492;
+    const CZ = 0x924924;
+    const shift = SpatialHash.COARSE_SHIFT * 3;
+    for (const [key, bucket] of this.cells) {
+      const coarseKey =
+        (((key & MX) >> shift) & CX) | (((key & MY) >> shift) & CY) | (((key & MZ) >> shift) & CZ);
+      this.coarse.set(coarseKey, (this.coarse.get(coarseKey) ?? 0) + bucket.length);
+    }
+    this.coarseDirty = false;
   }
 
   /**

@@ -27,6 +27,19 @@ describe('SpatialHash', () => {
     expect(collectPairs(hash)).toEqual([[0, 1]]);
   });
 
+  it('coarseRegionOccupied guarantees empty space (and only that)', () => {
+    const hash = new SpatialHash(1);
+    hash.insert(0, 0.5, 0.5, 0.5); // fine cell (0,0,0) -> coarse (0,0,0), fine 0..3
+    expect(hash.coarseRegionOccupied(0, 0, 0, 3, 3, 3)).toBe(true);
+    expect(hash.coarseRegionOccupied(-4, -4, -4, -1, -1, -1)).toBe(false); // biased-neighbor coarse
+    expect(hash.coarseRegionOccupied(4, 0, 0, 7, 3, 3)).toBe(false); // +x coarse cell
+    hash.insert(1, 8.5, 0.5, 0.5); // fine (8,0,0) -> coarse (2,0,0), fine 8..11
+    expect(hash.coarseRegionOccupied(8, 0, 0, 11, 3, 3)).toBe(true);
+    expect(hash.coarseRegionOccupied(4, 0, 0, 7, 3, 3)).toBe(false);
+    hash.clear(); // occupancy follows the grid lifecycle
+    expect(hash.coarseRegionOccupied(0, 0, 0, 3, 3, 3)).toBe(false);
+  });
+
   it('ignores bodies beyond the 27-cell neighborhood', () => {
     const hash = new SpatialHash(1);
     hash.insert(0, 0.1, 0.1, 0.1);

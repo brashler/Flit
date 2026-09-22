@@ -307,10 +307,14 @@ export class World {
     // would re-fetch 26 overlapping buckets per step, so probe the full
     // block only for the origin cell; afterwards just the 9-cell leading
     // face the slide exposes. The stamp keeps each body tested once per ray.
-    for (let ox = -1; ox <= 1; ox += 1) {
-      for (let oy = -1; oy <= 1; oy += 1) {
-        for (let oz = -1; oz <= 1; oz += 1) {
-          this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + oy, cz + oz);
+    // Faces in coarse-guaranteed-empty space are skipped outright (the
+    // coarse grid answers 4x4x4 occupancy in <=4 gets vs 9 fine ones).
+    if (this.hash.coarseRegionOccupied(cx - 1, cy - 1, cz - 1, cx + 1, cy + 1, cz + 1)) {
+      for (let ox = -1; ox <= 1; ox += 1) {
+        for (let oy = -1; oy <= 1; oy += 1) {
+          for (let oz = -1; oz <= 1; oz += 1) {
+            this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + oy, cz + oz);
+          }
         }
       }
     }
@@ -321,27 +325,33 @@ export class World {
         t = tMaxX;
         tMaxX += tDeltaX;
         cx += stepX;
-        for (let oy = -1; oy <= 1; oy += 1) {
-          for (let oz = -1; oz <= 1; oz += 1) {
-            this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + stepX, cy + oy, cz + oz);
+        if (this.hash.coarseRegionOccupied(cx + stepX, cy - 1, cz - 1, cx + stepX, cy + 1, cz + 1)) {
+          for (let oy = -1; oy <= 1; oy += 1) {
+            for (let oz = -1; oz <= 1; oz += 1) {
+              this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + stepX, cy + oy, cz + oz);
+            }
           }
         }
       } else if (tMaxY <= tMaxZ) {
         t = tMaxY;
         tMaxY += tDeltaY;
         cy += stepY;
-        for (let ox = -1; ox <= 1; ox += 1) {
-          for (let oz = -1; oz <= 1; oz += 1) {
-            this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + stepY, cz + oz);
+        if (this.hash.coarseRegionOccupied(cx - 1, cy + stepY, cz - 1, cx + 1, cy + stepY, cz + 1)) {
+          for (let ox = -1; ox <= 1; ox += 1) {
+            for (let oz = -1; oz <= 1; oz += 1) {
+              this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + stepY, cz + oz);
+            }
           }
         }
       } else {
         t = tMaxZ;
         tMaxZ += tDeltaZ;
         cz += stepZ;
-        for (let ox = -1; ox <= 1; ox += 1) {
-          for (let oy = -1; oy <= 1; oy += 1) {
-            this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + oy, cz + stepZ);
+        if (this.hash.coarseRegionOccupied(cx - 1, cy - 1, cz + stepZ, cx + 1, cy + 1, cz + stepZ)) {
+          for (let ox = -1; ox <= 1; ox += 1) {
+            for (let oy = -1; oy <= 1; oy += 1) {
+              this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + oy, cz + stepZ);
+            }
           }
         }
       }
