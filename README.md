@@ -150,6 +150,7 @@ time (see commit messages for the full series, including rejected designs).
 
 - ~~Morton-ordered broadphase cells~~ — done, measured, shipped
 - ~~three.js demo scene~~ — `npm run demo`, 220 balls in a box
+  (`?terrain` for heightfield hills, `?n=8000` for load testing)
 - ~~Worker-threaded stepping~~ — `WorkerWorld`: kick/waitForUpdate, SAB
   ping-pong zero-copy rendering
 - ~~Settled-pile solver cost~~ — per-body sleep shipped (34.2 → 9.2 ms

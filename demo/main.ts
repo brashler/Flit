@@ -16,21 +16,47 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WorkerWorld } from 'flit';
+import { Heightfield, WorkerWorld } from 'flit';
 
 // Load testing: ?n=8000 cranks the ball count (clamped to [1, 20000]).
+// ?terrain swaps the flat floor for rolling heightfield hills (the engine
+// samples the field -- no meshing; the mesh below is just this demo
+// drawing the same posts it feeds the worker).
 const params = new URLSearchParams(location.search);
 const COUNT = Math.min(Math.max(Number(params.get('n')) || 220, 1), 20000);
+const TERRAIN = params.has('terrain');
 const DT = 1 / 60;
 const BOX = {
   min: [-9, 0, -9] as [number, number, number],
   max: [9, 12, 9] as [number, number, number],
 };
 
+// Gentle deterministic hills spanning the play box (amplitude ~3.2).
+const FIELD = ((): Heightfield | null => {
+  if (!TERRAIN) return null;
+  const rows = 49;
+  const cols = 49;
+  const cellSize = 18 / (cols - 1);
+  const heights: number[] = [];
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const x = (c - (cols - 1) / 2) * cellSize;
+      const z = (r - (rows - 1) / 2) * cellSize;
+      heights.push(
+        1.1 * Math.sin(x * 0.55) * Math.cos(z * 0.45) +
+          0.5 * Math.sin(x * 1.3 + 0.7) * Math.sin(z * 1.1) +
+          1.6, // base lift: the whole field sits above y=0
+      );
+    }
+  }
+  return new Heightfield({ rows, cols, cellSize, origin: [-9, 0, -9], heights });
+})();
+
 // ---------- physics (on a worker: the game thread never steps) ----------
 const world = await WorkerWorld.create({
   restitution: 0.62,
-  groundY: 0,
+  groundY: FIELD ? null : 0,
+  heightfield: FIELD ?? undefined, // the worker builds and owns its copy
   bounds: BOX,
   capacity: 20000, // threaded worlds don't grow; the ?n= clamp matches this
 });
@@ -74,12 +100,24 @@ const sun = new DirectionalLight(0xffffff, 1.4);
 sun.position.set(8, 16, 6);
 scene.add(sun);
 
-const floor = new Mesh(
-  new PlaneGeometry(18.4, 18.4),
-  new MeshStandardMaterial({ color: 0x1d2433, roughness: 0.9 }),
-);
-floor.rotation.x = -Math.PI / 2;
-scene.add(floor);
+if (FIELD) {
+  // Draw the field: a plane displaced by the same posts (demo-side only).
+  const geo = new PlaneGeometry(18, 18, 48, 48);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  for (let v = 0; v < pos.count; v += 1) {
+    pos.setY(v, FIELD.heightAt(pos.getX(v), pos.getZ(v)));
+  }
+  geo.computeVertexNormals();
+  scene.add(new Mesh(geo, new MeshStandardMaterial({ color: 0x24402e, roughness: 0.95 })));
+} else {
+  const floor = new Mesh(
+    new PlaneGeometry(18.4, 18.4),
+    new MeshStandardMaterial({ color: 0x1d2433, roughness: 0.9 }),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
+}
 
 scene.add(
   new Box3Helper(
@@ -147,7 +185,7 @@ renderer.setAnimationLoop(() => {
     hud.textContent =
       `flit demo | ${world.count} balls | ${(1000 / frameMs).toFixed(0)} fps | ` +
       `worker step ${stepMs.toFixed(3)} ms roundtrip (${world.shared ? 'SAB zero-copy' : 'copy mode'})\n` +
-      `?n=8000 to load test | drag to orbit, wheel to zoom`;
+      `?n=8000 load test | ?terrain hills | drag to orbit, wheel to zoom`;
   }
 });
 
