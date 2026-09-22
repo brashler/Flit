@@ -23,6 +23,20 @@ export interface WorldOptions {
   friction?: number;
   /** Sequential-impulse iterations per step. Default 4. */
   velocityIterations?: number;
+  /**
+   * Stiction threshold (m/s). An awake dynamic body slower than this has
+   * its velocity zeroed outright — the static-friction floor real surfaces
+   * impose and naive sims neglect. A body staying quiet for ~0.5 s SETTLES:
+   * treated as static (skipped by integration, planes, and mutual contacts)
+   * until a contact partner moving >1 m/s (the restitution threshold) wakes
+   * it — slower pushes are held by static friction. "Quiet" also covers the
+   * supported-stationary case: a body resting on other bodies whose speed
+   * holds steady at the solver's jitter floor (which grows ~1 g*dt per
+   * awake link in a stack) settles too, so piles go quiet instead of
+   * jittering their neighbors awake forever. Default 0.01 (1 cm/s); 0
+   * disables settling.
+   */
+  settleSpeed?: number;
   /** Y coordinate of the infinite ground plane. Default 0; null disables it. */
   groundY?: number | null;
   /**
@@ -50,6 +64,26 @@ const _tangent = vec3.create();
 
 /** Impacts slower than this lose restitution, so resting contacts stop jittering. */
 const RESTITUTION_THRESHOLD = 1;
+/** Sustained sub-stiction frames before a body settles (~0.5 s at 60 Hz). */
+const SETTLE_DELAY_STEPS = 30;
+/**
+ * Contact partners faster than this (m/s) wake a settled body. Matched to
+ * RESTITUTION_THRESHOLD: sub-restitution impacts are resting contact, and a
+ * resting pile must not wake itself — gravity alone refreshes g*dt (~0.16
+ * m/s at 60 Hz) onto every supported body each step, so the bar must clear
+ * that by a wide margin.
+ */
+const WAKE_SPEED = RESTITUTION_THRESHOLD;
+/**
+ * Supported-stationary settle band (m/s): a body with a gravity-aligned
+ * resting contact whose speed holds within this band across the settle
+ * window is sitting at the solver's jitter floor, not in real motion.
+ * (The floor grows ~1 g*dt per awake link in a stack, so no absolute
+ * threshold near `settleSpeed` can ever quiet a pile.)
+ */
+const SUPPORTED_BAND = 0.1;
+/** Never settle anything moving faster than this, however stationary. */
+const SUPPORTED_MAX_SPEED = 2;
 /** Positional correction leaves this much penetration (m) to avoid fighting gravity. */
 const SLOP = 0.002;
 /** Fraction of penetration corrected per step (remaining resolves over a few steps). */
@@ -84,6 +118,7 @@ export class World {
   public restitution: number;
   public friction: number;
   public velocityIterations: number;
+  public settleSpeed: number;
   public groundY: number | null;
   public bounds: { min: vec3; max: vec3 } | null;
 
@@ -112,6 +147,22 @@ export class World {
   private rayStamp = new Int32Array(1024);
   private rayId = 0;
 
+  // Settle state (per-body sleep; arrays grow with capacity like rayStamp).
+  private settled = new Uint8Array(1024);
+  private settleTimer = new Uint8Array(1024);
+  private stashedInvMass = new Float32Array(1024);
+  /** Bodies currently settled (treated as static until woken). */
+  public settledCount = 0;
+
+  /** Last step in which the body had a gravity-aligned resting contact. */
+  private supportedStamp = new Int32Array(1024);
+  /** Reference speed anchoring the supported-stationary band. */
+  private settleRefSpeed = new Float32Array(1024);
+  /** Monotonic step counter, for supportedStamp comparisons. */
+  private stepCount = 0;
+  private readonly gravityDir: vec3 = vec3.create();
+  private gravityMag = 0;
+
   constructor(options: WorldOptions = {}) {
     this.capacity = options.capacity ?? 1024;
     this.positions = new Float32Array(this.capacity * 3);
@@ -123,6 +174,11 @@ export class World {
     this.restitution = options.restitution ?? 0.4;
     this.friction = options.friction ?? 0.3;
     this.velocityIterations = options.velocityIterations ?? 4;
+    this.settleSpeed = options.settleSpeed ?? 0.01;
+    this.gravityMag = vec3.length(this.gravity);
+    if (this.gravityMag > 0) {
+      vec3.scale(this.gravityDir, this.gravity, 1 / this.gravityMag);
+    }
     this.groundY = options.groundY === undefined ? 0 : options.groundY;
     this.bounds = options.bounds
       ? { min: vec3.fromValues(...options.bounds.min), max: vec3.fromValues(...options.bounds.max) }
@@ -154,9 +210,15 @@ export class World {
 
   public step(dt: number): void {
     this.refreshFrictionLut();
+    this.stepCount += 1;
+    this.gravityMag = vec3.length(this.gravity);
+    if (this.gravityMag > 0) {
+      vec3.scale(this.gravityDir, this.gravity, 1 / this.gravityMag);
+    }
     this.integrate(dt);
     this.rebuildHash();
     this.buildContacts();
+    this.wakeSettledBodies();
     this.solveVelocities();
     this.solvePositions();
     if (this.groundY !== null) {
@@ -165,6 +227,7 @@ export class World {
     if (this.bounds !== null) {
       this.resolveBounds(this.bounds);
     }
+    this.settleBodies();
   }
 
   /**
@@ -287,6 +350,91 @@ export class World {
     return { index: i, distance: t, point: [hx, hy, hz], normal: [nx, ny, nz] };
   }
 
+  /** True while the body is settled (treated as static until woken). */
+  public isSettled(index: number): boolean {
+    return this.settled[index] === 1;
+  }
+
+  /**
+   * Wake settled bodies touched by a fast-enough contact partner. Per-body
+   * (no island union-find): wake propagates one contact per step, which is
+   * fine for impacts and a documented approximation for slow pushes —
+   * settled piles behave as if held by static friction.
+   */
+  private wakeSettledBodies(): void {
+    if (this.settledCount === 0) return;
+    for (let c = 0; c < this.contactCount; c += 1) {
+      const i = this.contactI[c];
+      const j = this.contactJ[c];
+      // Settled bodies have invMass 0, so addContact already dropped
+      // settled-settled pairs: at most one side here can be settled.
+      const si = this.settled[i] === 1;
+      if (si === (this.settled[j] === 1)) continue;
+      const settledIdx = si ? i : j;
+      const partner = si ? j : i;
+      if (vec3.squaredLength(this.velViews[partner]) > WAKE_SPEED * WAKE_SPEED) {
+        this.wakeBody(settledIdx);
+      }
+    }
+  }
+
+  private wakeBody(i: number): void {
+    if (this.settled[i] === 0) return;
+    this.settled[i] = 0;
+    this.settleTimer[i] = 0;
+    this.invMasses[i] = this.stashedInvMass[i];
+    this.settledCount -= 1;
+  }
+
+  private settleBody(i: number): void {
+    this.settled[i] = 1;
+    this.settleTimer[i] = 0;
+    this.stashedInvMass[i] = this.invMasses[i];
+    this.invMasses[i] = 0;
+    vec3.set(this.velViews[i], 0, 0, 0);
+    this.settledCount += 1;
+  }
+
+  /**
+   * Stiction + settling (end of step). Awake dynamic bodies slower than
+   * settleSpeed get their velocity zeroed outright — the static-friction
+   * floor real surfaces impose and naive sims neglect, and the thing that
+   * lets a pile go quiet instead of jittering its neighbors awake forever.
+   * A body staying under the threshold for SETTLE_DELAY_STEPS settles:
+   * invMass swapped to 0, so the existing static-body paths skip it
+   * everywhere (integration, planes, and settled-settled contacts).
+   */
+  private settleBodies(): void {
+    if (this.settleSpeed <= 0) return;
+    const stiction2 = this.settleSpeed * this.settleSpeed;
+    for (let i = 0; i < this.count; i += 1) {
+      if (this.settled[i] === 1 || this.invMasses[i] === 0) continue; // settled or static
+      const v = this.velViews[i];
+      const speed2 = vec3.squaredLength(v);
+      let quiet = speed2 < stiction2;
+      if (!quiet && this.supportedStamp[i] === this.stepCount) {
+        // Supported and not creeping: the impulse split between equal masses
+        // leaves a per-link residual (~1 g*dt per awake link in a stack)
+        // that pure stiction can never beat. A speed holding steady within a
+        // narrow band is that jitter floor, not real motion -- qualify it.
+        const speed = Math.sqrt(speed2);
+        quiet =
+          speed < SUPPORTED_MAX_SPEED &&
+          Math.abs(speed - this.settleRefSpeed[i]) < SUPPORTED_BAND;
+        if (!quiet) this.settleRefSpeed[i] = speed; // re-anchor the band
+      }
+      if (quiet) {
+        vec3.set(v, 0, 0, 0);
+        this.settleTimer[i] += 1;
+        if (this.settleTimer[i] >= SETTLE_DELAY_STEPS) {
+          this.settleBody(i);
+        }
+      } else {
+        this.settleTimer[i] = 0;
+      }
+    }
+  }
+
   private integrate(dt: number): void {
     for (let i = 0; i < this.count; i += 1) {
       if (this.invMasses[i] === 0) continue; // static bodies don't integrate
@@ -346,6 +494,16 @@ export class World {
     vec3.subtract(_relVel, this.velViews[j], this.velViews[i]);
     const normalSpeed = vec3.dot(_relVel, _normal);
     this.contactBias[c] = normalSpeed < -RESTITUTION_THRESHOLD ? -this.restitution * normalSpeed : 0;
+
+    // Supported-stationary bookkeeping: a resting-class contact (no
+    // restitution bias) whose normal aligns with gravity marks the upper
+    // body as supported this step — the qualifier that lets settleBodies
+    // tell a solver jitter floor apart from mid-air flight or free rolling.
+    if (this.contactBias[c] === 0 && this.gravityMag > 0) {
+      const align = vec3.dot(_normal, this.gravityDir);
+      if (align > 0.5) this.supportedStamp[i] = this.stepCount;
+      else if (align < -0.5) this.supportedStamp[j] = this.stepCount;
+    }
   }
 
   private solveVelocities(): void {
@@ -421,7 +579,11 @@ export class World {
       p[1] += penetration;
       const v = this.velViews[i];
       if (v[1] < 0) {
-        v[1] = -v[1] * this.restitution;
+        // Sub-threshold impacts stop dead (matches the body-body restitution
+        // cutoff) — otherwise gravity re-bounces ~16 cm/s every step and
+        // nothing resting on a plane can ever get under the stiction floor.
+        const impact = -v[1];
+        v[1] = impact > RESTITUTION_THRESHOLD ? impact * this.restitution : 0;
         this.dampTangential(v, 1);
       }
     }
@@ -437,13 +599,15 @@ export class World {
         if (p[axis] - r < bounds.min[axis]) {
           p[axis] = bounds.min[axis] + r;
           if (v[axis] < 0) {
-            v[axis] = -v[axis] * this.restitution;
+            const impact = -v[axis];
+            v[axis] = impact > RESTITUTION_THRESHOLD ? impact * this.restitution : 0;
             this.dampTangential(v, axis);
           }
         } else if (p[axis] + r > bounds.max[axis]) {
           p[axis] = bounds.max[axis] - r;
           if (v[axis] > 0) {
-            v[axis] = -v[axis] * this.restitution;
+            const impact = v[axis];
+            v[axis] = impact > RESTITUTION_THRESHOLD ? -impact * this.restitution : 0;
             this.dampTangential(v, axis);
           }
         }
@@ -513,6 +677,23 @@ export class World {
       const growStamps = new Int32Array(this.capacity);
       growStamps.set(this.rayStamp);
       this.rayStamp = growStamps;
+    }
+    if (this.settled.length < this.capacity) {
+      const growSettled = new Uint8Array(this.capacity);
+      growSettled.set(this.settled);
+      this.settled = growSettled;
+      const growTimer = new Uint8Array(this.capacity);
+      growTimer.set(this.settleTimer);
+      this.settleTimer = growTimer;
+      const growStash = new Float32Array(this.capacity);
+      growStash.set(this.stashedInvMass);
+      this.stashedInvMass = growStash;
+      const growSupported = new Int32Array(this.capacity);
+      growSupported.set(this.supportedStamp);
+      this.supportedStamp = growSupported;
+      const growRef = new Float32Array(this.capacity);
+      growRef.set(this.settleRefSpeed);
+      this.settleRefSpeed = growRef;
     }
 
     // Views pointed at the old buffers — rebuild them all.
