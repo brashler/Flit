@@ -1,4 +1,5 @@
 import { vec3 } from 'gl-matrix';
+import type { Heightfield } from './heightfield.js';
 import { SpatialHash } from './spatial-hash.js';
 
 export interface ParticleSpec {
@@ -40,6 +41,15 @@ export interface WorldOptions {
   /** Y coordinate of the infinite ground plane. Default 0; null disables it. */
   groundY?: number | null;
   /**
+   * Optional heightfield terrain. Bodies collide with it (full positional
+   * push + the same restitution cutoff and LUT friction as the ground
+   * plane, so bodies settle on terrain too) and raycasts report it as
+   * index -1. No meshing: sampling is a pure function of (x, z). Usually
+   * pair it with `groundY: null` -- both are plane-class colliders.
+   * Default null.
+   */
+  heightfield?: Heightfield | null;
+  /**
    * Optional axis-aligned box; dynamic bodies reflect off its walls with
    * the world restitution. Independent of groundY. Default null (no walls).
    */
@@ -49,7 +59,7 @@ export interface WorldOptions {
 }
 
 export interface RayHit {
-  /** Body index. */
+  /** Body index; -1 for a heightfield hit when a heightfield is attached. */
   index: number;
   /** Distance along the (normalized) ray direction. */
   distance: number;
@@ -120,6 +130,7 @@ export class World {
   public velocityIterations: number;
   public settleSpeed: number;
   public groundY: number | null;
+  public heightfield: Heightfield | null;
   public bounds: { min: vec3; max: vec3 } | null;
 
   /**
@@ -180,6 +191,7 @@ export class World {
       vec3.scale(this.gravityDir, this.gravity, 1 / this.gravityMag);
     }
     this.groundY = options.groundY === undefined ? 0 : options.groundY;
+    this.heightfield = options.heightfield ?? null;
     this.bounds = options.bounds
       ? { min: vec3.fromValues(...options.bounds.min), max: vec3.fromValues(...options.bounds.max) }
       : null;
@@ -227,6 +239,9 @@ export class World {
     if (this.bounds !== null) {
       this.resolveBounds(this.bounds);
     }
+    if (this.heightfield !== null) {
+      this.resolveHeightfield(this.heightfield);
+    }
     this.settleBodies();
   }
 
@@ -247,9 +262,23 @@ export class World {
     direction: [number, number, number],
     maxDistance = Infinity,
   ): RayHit[] {
-    if (this.hashDirty) this.rebuildHash();
     const dirLen = Math.hypot(direction[0], direction[1], direction[2]);
-    if (dirLen < 1e-12 || this.count === 0) return [];
+    if (dirLen < 1e-12) return [];
+    if (this.count === 0) {
+      // No bodies: the voxel walk has nothing to find; at most a terrain hit.
+      if (this.heightfield === null) return [];
+      const terrainHit = this.heightfield.raycast(origin, direction, maxDistance);
+      if (terrainHit === null) return [];
+      return [
+        {
+          index: -1,
+          distance: terrainHit.distance,
+          point: terrainHit.point,
+          normal: terrainHit.normal,
+        },
+      ];
+    }
+    if (this.hashDirty) this.rebuildHash();
     const dx = direction[0] / dirLen;
     const dy = direction[1] / dirLen;
     const dz = direction[2] / dirLen;
@@ -315,6 +344,18 @@ export class World {
             this.testRayCell(hits, origin, dx, dy, dz, maxDistance, cx + ox, cy + oy, cz + stepZ);
           }
         }
+      }
+    }
+
+    if (this.heightfield !== null) {
+      const terrainHit = this.heightfield.raycast(origin, direction, maxDistance);
+      if (terrainHit !== null) {
+        hits.push({
+          index: -1,
+          distance: terrainHit.distance,
+          point: terrainHit.point,
+          normal: terrainHit.normal,
+        });
       }
     }
 
@@ -654,6 +695,55 @@ export class World {
             this.dampTangential(v, axis);
           }
         }
+      }
+    }
+  }
+
+  /** Contact friction for an arbitrary normal: scale the tangential part by the LUT. */
+  private dampTangentialN(v: vec3, nx: number, ny: number, nz: number): void {
+    const vn = v[0] * nx + v[1] * ny + v[2] * nz;
+    const tx = v[0] - vn * nx;
+    const ty = v[1] - vn * ny;
+    const tz = v[2] - vn * nz;
+    const t2 = tx * tx + ty * ty + tz * tz;
+    const retain = this.frictionLut[World.frictionBucket(t2)] / 256;
+    v[0] = vn * nx + tx * retain;
+    v[1] = vn * ny + ty * retain;
+    v[2] = vn * nz + tz * retain;
+  }
+
+  /**
+   * Heightfield response, mirroring resolveGround: full positional push
+   * along the local terrain normal, restitution cutoff so resting bodies
+   * can reach the stiction floor, LUT friction on the tangential part.
+   */
+  private resolveHeightfield(field: Heightfield): void {
+    for (let i = 0; i < this.count; i += 1) {
+      if (this.invMasses[i] === 0) continue;
+      const p = this.posViews[i];
+      const contact = field.contact(p[0], p[1], p[2], this.radii[i]);
+      if (contact === null) continue;
+
+      p[0] += contact.nx * contact.penetration;
+      p[1] += contact.ny * contact.penetration;
+      p[2] += contact.nz * contact.penetration;
+
+      const v = this.velViews[i];
+      const vn = v[0] * contact.nx + v[1] * contact.ny + v[2] * contact.nz;
+      if (vn < 0) {
+        const impact = -vn;
+        if (impact > RESTITUTION_THRESHOLD) {
+          const reflect = (1 + this.restitution) * vn;
+          v[0] -= contact.nx * reflect;
+          v[1] -= contact.ny * reflect;
+          v[2] -= contact.nz * reflect;
+        } else {
+          // Sub-threshold impacts stop dead along the normal (see resolveGround).
+          v[0] -= contact.nx * vn;
+          v[1] -= contact.ny * vn;
+          v[2] -= contact.nz * vn;
+        }
+        this.dampTangentialN(v, contact.nx, contact.ny, contact.nz);
       }
     }
   }
